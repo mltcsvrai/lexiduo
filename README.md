@@ -36,15 +36,16 @@
 - 📲 **YouTube Share Intent & Smart Clipboard**: Share any video directly from the official YouTube app (`ACTION_SEND`) or instantly open copied YouTube links detected from your clipboard.
 - 🌍 **35 Global Languages & RTL Support**: Complete interface localization and subtitle support across 35 languages, including Right-to-Left (RTL) layout support for Arabic, Hebrew, and Persian.
 - 💾 **Local-First & Offline-Tolerant (IndexedDB)**: Transcripts are cached locally with an LRU eviction policy (up to 20 videos) for instant replay. Watch history, per-video timestamps, and user preferences remain on your device.
-- 🔑 **Bring Your Own Key (BYOK)**: 100% free and open-source. Includes a built-in standard engine, or connect a free Google AI Studio key to unlock Gemma 4 31B IT models.
+- ⚡ **Zero Setup (Works Out of the Box)**: No registration or API key needed. The built-in free standard translation engine is active immediately upon install.
+- 🔑 **Optional AI Power (BYOK)**: For deeper conversational nuance and slang detection, you can optionally connect your free Gemini API key to activate Google Gemma 4 31B IT models.
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Zero Setup Required)
 
-1. **Download APK**: Download the latest [`app-release.apk`](https://github.com/mltcsvrai/yt-translate-android/releases/latest/download/app-release.apk) and install it on your Android device.
-2. **Add Free API Key (Optional)**: Open **Settings** in the app and paste your free key from [Google AI Studio](https://aistudio.google.com/apikey) to enable Gemma 4 31B IT contextual translation.
-3. **Start Learning**: Paste any YouTube link, pick a sample video, or tap **Share** inside the official YouTube app!
+1. **Install App**: Download [`app-release.apk`](https://github.com/mltcsvrai/yt-translate-android/releases/latest/download/app-release.apk) and install it on your Android phone.
+2. **Start Watching**: Open the app and start learning immediately! The **free standard engine is enabled by default** with zero setup.
+3. **Optional AI Turbocharge**: If you want deep contextual AI translations, you can optionally paste a free Google Gemini key in **Settings** (obtainable free at [Google AI Studio](https://aistudio.google.com/apikey)).
 
 ---
 
