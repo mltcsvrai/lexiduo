@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mltcsvrai/yt-translate-android/master/assets/logo.png" alt="YT Çeviri Logo" width="110" />
+  <img src="https://raw.githubusercontent.com/mltcsvrai/yt-translate-android/master/assets/logo.png" alt="YT Translator Logo" width="110" />
 </p>
 
-<h1 align="center">YT Çeviri</h1>
+<h1 align="center">YT Translator</h1>
 
 <p align="center">
-  <strong>Context-aware, AI-powered YouTube subtitle translator for Android.</strong><br>
+  <strong>Context-aware, AI-powered YouTube subtitle translator and language learning app for Android.</strong><br>
   Learn languages naturally by understanding words and idioms in context while watching videos.
 </p>
 
@@ -13,7 +13,8 @@
   <a href="https://github.com/mltcsvrai/yt-translate-android/releases/latest"><img src="https://img.shields.io/github/v/release/mltcsvrai/yt-translate-android?color=blue&label=Release" alt="Latest Release"></a>
   <a href="https://github.com/mltcsvrai/yt-translate-android/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
   <a href="https://capacitorjs.com"><img src="https://img.shields.io/badge/Capacitor-8-119EFF.svg?logo=capacitor&logoColor=white" alt="Capacitor"></a>
-  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-18-61DAFB.svg?logo=react&logoColor=white" alt="React"></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=white" alt="React 19"></a>
+  <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind-4-38B2AC.svg?logo=tailwind-css&logoColor=white" alt="Tailwind 4"></a>
 </p>
 
 <p align="center">
@@ -26,45 +27,63 @@
 
 ## ✨ Highlights
 
-- 🧠 **Context-Aware Translation**: Translates subtitle words within sentence context using Google Gemini.
-- 🧩 **Idiom & Phrase Grouping**: Automatically identifies idioms and phrasal verbs as single units.
-- 📲 **YouTube Share Intent**: Share any video directly from the official YouTube app to start watching.
-- ⏱️ **Audio-Subtitle Sync**: On-the-fly subtitle offset adjustment (-5s to +5s) for delayed captions.
-- 🔑 **Bring Your Own Key (BYOK)**: 100% free and open source. Use your own free Gemini API key.
+- 🧠 **Context-Aware AI Translation**: Translates complete sentences using Google Gemma 4 31B IT and Gemini AI to capture conversational nuances and metaphors rather than broken word-by-word literal translation.
+- 📐 **Zero-Drift Sentence Segmentation**: Automatically aggregates fragmented YouTube ASR captions using punctuation, natural speech pauses ($\ge 0.75\text{s}$), and word limits, distributing translated text across proportional time windows with strict frame-accurate synchronization.
+- 🛡️ **Autonomous Subtitle Gap Auditor**: In-place auditor automatically inspects translated cues, detects dropped or mismatched segments, and seamlessly repairs them in the background.
+- 📖 **Interactive Word Lookup & Audio Pronunciation**: Tap any subtitle word to automatically pause playback and view its instant translation, hear native audio pronunciation (Text-to-Speech via Web Speech API), or copy it with a single tap.
+- 🧩 **Multi-Word Idiom Selection**: Select phrasal verbs and multi-word expressions directly on screen to look them up and translate them as cohesive linguistic units.
+- 📜 **Interactive Transcript & Tablet Split-View**: Full scrollable transcript panel with real-time sentence tracking and one-tap video seeking. Supports phones (portrait/landscape), split-screen tablets, and desktop.
+- 📲 **YouTube Share Intent & Smart Clipboard**: Share any video directly from the official YouTube app (`ACTION_SEND`) or instantly open copied YouTube links detected from your clipboard.
+- 🌍 **35 Global Languages & RTL Support**: Complete interface localization and subtitle support across 35 languages, including Right-to-Left (RTL) layout support for Arabic, Hebrew, and Persian.
+- 💾 **Local-First & Offline-Tolerant (IndexedDB)**: Transcripts are cached locally with an LRU eviction policy (up to 20 videos) for instant replay. Watch history, per-video timestamps, and user preferences remain on your device.
+- 🔑 **Bring Your Own Key (BYOK)**: 100% free and open-source. Includes a built-in standard engine, or connect a free Google AI Studio key to unlock Gemma 4 31B IT models.
 
 ---
 
 ## 🚀 Quick Start
 
-1. **Download APK**: Grab the latest [`app-release.apk`](https://github.com/mltcsvrai/yt-translate-android/releases/latest/download/app-release.apk) and install it on your Android phone.
-2. **Add API Key**: Open the app and paste your free key from [Google AI Studio](https://aistudio.google.com/).
-3. **Start Learning**: Search any YouTube video or share directly from the YouTube app.
+1. **Download APK**: Download the latest [`app-release.apk`](https://github.com/mltcsvrai/yt-translate-android/releases/latest/download/app-release.apk) and install it on your Android device.
+2. **Add Free API Key (Optional)**: Open **Settings** in the app and paste your free key from [Google AI Studio](https://aistudio.google.com/apikey) to enable Gemma 4 31B IT contextual translation.
+3. **Start Learning**: Paste any YouTube link, pick a sample video, or tap **Share** inside the official YouTube app!
 
 ---
 
 ## 🛠 Tech Stack
 
-- **Frontend**: React, TypeScript, TailwindCSS, Lucide Icons
+- **Frontend Core**: React 19, TypeScript, TailwindCSS 4, Vite 8
+- **State Management**: Zustand 5
 - **Mobile Container**: Capacitor 8 (Android)
-- **AI & Metadata**: Google Gemini API, Cloudflare Workers
+- **Local Storage**: IndexedDB via `idb-keyval` (Local-first & LRU Transcript Cache)
+- **UI & Popovers**: `@floating-ui/react`, Lucide Icons
+- **AI Models**: Google Gemma 4 31B IT, Gemini 3.5 Flash Lite, Gemini 2.5 Flash Lite
+- **Native Integrations**: Capacitor Clipboard, Native Share Intent (`ACTION_SEND`), Android Hardware Back Navigation
 
 ---
 
-## 💻 Development
+## 💻 Development & Build
 
 ```bash
-# Clone & install
+# Clone the repository
 git clone https://github.com/mltcsvrai/yt-translate-android.git
 cd yt-translate-android
+
+# Install dependencies
 npm install
 
-# Start local web dev
+# Run test suite
+npx vitest run
+
+# Start local web development server
 npm run dev
 
-# Build Android Release APK
+# Build web assets and sync with Capacitor Android
 npm run build && npx cap sync android
+
+# Compile Android Release APK
 cd android && ./gradlew assembleRelease
 ```
+
+Compiled APK will be generated at `android/app/build/outputs/apk/release/app-release.apk`.
 
 ---
 
