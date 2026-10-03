@@ -64,7 +64,10 @@ interface AppState {
   syncOffset: number;
   setSyncOffset: (offset: number) => void;
 
-  lookupWordAction: (word: string, isTurkish: boolean, tokenId: string | null) => Promise<void>;
+  historyLimit: number;
+  setHistoryLimit: (limit: number) => void;
+
+  lookupWordAction: (word: string, isTargetWord: boolean, tokenId: string | null) => Promise<void>;
 }
 
 import { lookupWord } from '../services/dictionaryService';
@@ -129,10 +132,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   showSubtitleBg: true,
   setShowSubtitleBg: (show) => set({ showSubtitleBg: show }),
   
-  syncOffset: 1.5,
+  syncOffset: 0,
   setSyncOffset: (offset) => set({ syncOffset: offset }),
 
-  lookupWordAction: async (word: string, isTurkish: boolean, tokenId: string | null) => {
+  historyLimit: 6,
+  setHistoryLimit: (limit) => set({ historyLimit: limit }),
+
+  lookupWordAction: async (word: string, isTargetWord: boolean, tokenId: string | null) => {
     const state = get();
     set({ activeTokenId: tokenId, wordLoading: true });
     
@@ -142,7 +148,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
 
     try {
-      const translation = await lookupWord(word, state.sourceLang, state.targetLang, isTurkish, state.apiKey);
+      const translation = await lookupWord(word, state.sourceLang, state.targetLang, isTargetWord, state.apiKey);
       // Ensure we haven't clicked another word while waiting
       if (get().activeTokenId === tokenId) {
         set({ activeWordTranslation: translation });
@@ -154,7 +160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           activeWordTranslation: {
             word,
             normalizedWord: word,
-            translation: 'Bulunamadı'
+            translation: word
           }
         });
       }

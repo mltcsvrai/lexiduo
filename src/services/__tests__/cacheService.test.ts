@@ -4,12 +4,15 @@ import * as idbKeyval from 'idb-keyval';
 
 vi.mock('idb-keyval', () => ({
   get: vi.fn(),
-  set: vi.fn()
+  set: vi.fn(),
+  del: vi.fn()
 }));
 
 describe('cacheService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(idbKeyval.get).mockResolvedValue(undefined);
+    vi.mocked(idbKeyval.set).mockResolvedValue(undefined);
   });
 
   it('should return null if cache is empty', async () => {
@@ -20,7 +23,7 @@ describe('cacheService', () => {
   });
 
   it('should return transcript if cached', async () => {
-    const mockData = { cues: [{ id: '1', start: 0, end: 1, enText: 'Hello', trText: 'Merhaba' }], isAiTranslated: true };
+    const mockData = { cues: [{ id: '1', start: 0, end: 1, sourceText: 'Hello', targetText: 'Merhaba' }], isAiTranslated: true };
     vi.mocked(idbKeyval.get).mockResolvedValueOnce(mockData);
     
     const result = await getCachedTranscript('test-video-id', 'en', 'tr');

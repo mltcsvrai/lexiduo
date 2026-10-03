@@ -36,6 +36,13 @@ cloudflare-worker/.wrangler/
 cloudflare-worker/node_modules/
 .dev.vars
 
-# Memory Bank (Optional depending on if user wants it in repo, usually good to keep but let's exclude active logs)
-.agents/
+# APK binaries
+*.apk
+
+# Local AI & Memory Files
 memory-bank/
+.agents/
+AI_GUIDELINES.md
+PROJECT_SKILLS.md
+Project_Goals.md
+patches/

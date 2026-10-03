@@ -1,16 +1,33 @@
 import { CapacitorHttp } from '@capacitor/core';
 import type { SubtitleCue, VideoInfo } from '../types';
+export type { SubtitleCue, VideoInfo };
 import { getCachedTranscript, cacheTranscript } from './cacheService';
+import { auditAndRepairCues, isCueUntranslated } from './subtitleAuditor';
+import { aggregateSentenceCues, distributeTargetTextToWindows } from './sentenceSegmentation';
 
 export function extractYouTubeId(urlOrId: string): string {
+  if (!urlOrId || typeof urlOrId !== 'string') return '';
   const clean = urlOrId.trim();
-  if (clean.length === 11 && !clean.includes('/')) {
+
+  // 1. Direct 11-char YouTube video ID check
+  if (/^[a-zA-Z0-9_-]{11}$/.test(clean)) {
     return clean;
   }
-  
-  const regExp = /[\s\S]*(youtu\.be\/|v\/|u\/\w\/|embed\/|shorts\/|watch\?v=|\&v=)([^#\&\?\s]*)/;
+
+  // 2. Comprehensive pattern for all YouTube URL variants (including inside sentence/share texts)
+  // Supports: youtu.be, watch?v=, watch?feature=share&v=, shorts/, live/, embed/, v/
+  const regExp = /(?:https?:\/\/)?(?:www\.|m\.|music\.)?(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|v\/|shorts\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   const match = clean.match(regExp);
-  return (match && match[2].length === 11) ? match[2] : clean;
+  if (match && match[1]) {
+    return match[1];
+  }
+
+  // 3. Fallback: if single word with length 11 without slash or whitespace
+  if (clean.length === 11 && !clean.includes('/') && !clean.includes(' ')) {
+    return clean;
+  }
+
+  return '';
 }
 
 export const POPULAR_VIDEOS: VideoInfo[] = [
@@ -106,10 +123,37 @@ export async function fetchVideoSubtitles(
   onFastCuesReady?: (cues: SubtitleCue[]) => void
 ): Promise<{ cues: SubtitleCue[]; isAiTranslated: boolean }> {
   
-  // 0. Check Cache First
+  // 0. Check Cache First & Audit for Poisoned/Untranslated Cues
   const cached = await getCachedTranscript(videoId, sourceLang, targetLang);
-  if (cached) {
+  if (cached && cached.cues && cached.cues.length > 0) {
+    const hasUntranslated = cached.cues.some(c => isCueUntranslated(c, sourceLang, targetLang));
+    if (!hasUntranslated) {
+      if (onFastCuesReady) onFastCuesReady(cached.cues);
+      return cached;
+    }
+
+    // Immediately present existing cues so UI isn't empty, then repair in background
     if (onFastCuesReady) onFastCuesReady(cached.cues);
+
+    try {
+      const { repairedCues, repairedCount } = await auditAndRepairCues(
+        cached.cues,
+        sourceLang,
+        targetLang,
+        translateTextSecure,
+        (patched) => {
+          if (onFastCuesReady) onFastCuesReady(patched);
+        }
+      );
+      if (repairedCount > 0) {
+        await cacheTranscript(videoId, sourceLang, targetLang, repairedCues, true);
+        if (onFastCuesReady) onFastCuesReady(repairedCues);
+        return { cues: repairedCues, isAiTranslated: true };
+      }
+    } catch (e) {
+      console.warn('Cached cues repair notice:', e);
+    }
+
     return cached;
   }
 
@@ -178,6 +222,14 @@ export async function fetchVideoSubtitles(
     return { cues: [], isAiTranslated: false };
   }
 
+  // Sort and clamp raw cues to guarantee strict non-overlapping timestamps
+  rawCues.sort((a, b) => a.start - b.start);
+  for (let i = 0; i < rawCues.length - 1; i++) {
+    if (rawCues[i].end > rawCues[i + 1].start) {
+      rawCues[i].end = rawCues[i + 1].start;
+    }
+  }
+
   // Initial raw cues
   const initialCues: SubtitleCue[] = rawCues.map(c => ({
     id: c.id,
@@ -188,10 +240,29 @@ export async function fetchVideoSubtitles(
   }));
 
   // FAST PATH: Translate sentence groups in parallel so BOTH exist immediately
-  const fastCues = await translateFastParallel(initialCues, detectedLang, targetLang);
+  let fastCues = await translateFastParallel(initialCues, detectedLang, targetLang);
   
   if (onFastCuesReady) {
     onFastCuesReady(fastCues);
+  }
+
+  // Internal Audit & Gap Repair Engine: Detect untranslated lines and repair them in-place
+  try {
+    const auditResult = await auditAndRepairCues(
+      fastCues,
+      detectedLang,
+      targetLang,
+      translateTextSecure,
+      (patchedCues) => {
+        if (onFastCuesReady) onFastCuesReady(patchedCues);
+      }
+    );
+    if (auditResult.repairedCount > 0) {
+      fastCues = auditResult.repairedCues;
+      if (onFastCuesReady) onFastCuesReady(fastCues);
+    }
+  } catch (auditErr) {
+    console.warn('Subtitle gap repair notice:', auditErr);
   }
 
   // Safe Gemma 4 31B IT AI translation (never crashes or hangs if API key is invalid)
@@ -199,8 +270,11 @@ export async function fetchVideoSubtitles(
     try {
       const aiCues = await translateWithGemmaAI(fastCues, detectedLang, targetLang, apiKey.trim());
       if (aiCues && aiCues.length > 0) {
-        await cacheTranscript(videoId, sourceLang, targetLang, aiCues, true);
-        return { cues: aiCues, isAiTranslated: true };
+        // Also audit AI output for any dropped/untranslated cues
+        const finalAudit = await auditAndRepairCues(aiCues, detectedLang, targetLang, translateTextSecure);
+        const resolvedCues = finalAudit.repairedCues;
+        await cacheTranscript(videoId, sourceLang, targetLang, resolvedCues, true);
+        return { cues: resolvedCues, isAiTranslated: true };
       }
     } catch (err) {
       console.warn('Gemma AI translation error (falling back to fast cues):', err);
@@ -289,114 +363,145 @@ function parseTimedTextXml(xmlData: string): any[] {
     }
   }
 
+  // Sort by start time and clamp overlapping end times
+  lines.sort((a, b) => a.start - b.start);
+  for (let i = 0; i < lines.length - 1; i++) {
+    if (lines[i].end > lines[i + 1].start) {
+      lines[i].end = lines[i + 1].start;
+    }
+  }
+
   return lines;
 }
 
 
-interface CueGroup {
-  cues: SubtitleCue[];
-  sourceText: string;
-  translatedText?: string;
-}
+// Helper to delay between rapid API calls
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function translateFastParallel(cues: SubtitleCue[], sourceLang: string, targetLang: string): Promise<SubtitleCue[]> {
-  const groups: CueGroup[] = [];
+  if (!cues || cues.length === 0) return [];
 
-  let currentCues: SubtitleCue[] = [];
-  let currentText = '';
+  // 1. Group fragmented ASR cues into meaningful sentences
+  const sentenceGroups = aggregateSentenceCues(cues);
+  const batchSize = 12;
+  const processedGroups: { group: any; targetText: string }[] = [];
 
-  for (let i = 0; i < cues.length; i++) {
-    const text = cues[i].sourceText || '';
-    currentCues.push(cues[i]);
-    currentText += (currentText ? ' ' : '') + text;
-
-    const endsWithPunct = /[.?!]$/.test(text.trim());
-    if (endsWithPunct || currentCues.length >= 3 || i === cues.length - 1) {
-      groups.push({
-        cues: [...currentCues],
-        sourceText: currentText
-      });
-      currentCues = [];
-      currentText = '';
-    }
-  }
-
-  // Process in batches of 40 using <div> batching to completely avoid 429 Too Many Requests
-  const batchSize = 40;
-  for (let i = 0; i < groups.length; i += batchSize) {
-    const chunk = groups.slice(i, i + batchSize);
+  for (let i = 0; i < sentenceGroups.length; i += batchSize) {
+    const chunk = sentenceGroups.slice(i, i + batchSize);
     
-    // Combine texts into <div> blocks
-    const combinedHtml = chunk.map(g => `<div>${g.sourceText}</div>`).join('');
-    
+    // Combine full sentences using distinct newline delimiter \n
+    const combinedText = chunk.map(g => (g.fullSourceText || '').replace(/\n+/g, ' ').trim()).join('\n');
+    let translatedSentences: string[] = [];
+
     try {
-      const translatedHtml = await translateGTX(combinedHtml, sourceLang, targetLang);
-      
-      // Extract translated texts from <div> blocks
-      const translatedDivs = translatedHtml.match(/<div[^>]*>([\s\S]*?)<\/div>/gi);
-      
-      for (let j = 0; j < chunk.length; j++) {
-        if (translatedDivs && translatedDivs[j]) {
-          chunk[j].translatedText = translatedDivs[j].replace(/<\/?div[^>]*>/gi, '').trim();
-        } else {
-          chunk[j].translatedText = chunk[j].sourceText;
+      const translatedCombined = await translateTextSecure(combinedText, sourceLang, targetLang);
+      const splitLines = translatedCombined.split('\n');
+
+      if (splitLines.length === chunk.length) {
+        translatedSentences = splitLines.map(line => line.trim());
+      } else {
+        // If line count mismatch, translate full sentence individually
+        for (const g of chunk) {
+          try {
+            const single = await translateTextSecure(g.fullSourceText, sourceLang, targetLang);
+            translatedSentences.push(single || g.fullSourceText);
+          } catch {
+            translatedSentences.push(g.fullSourceText);
+          }
         }
       }
-    } catch (e) {
-      for (const group of chunk) {
-        group.translatedText = group.sourceText;
+    } catch {
+      for (const g of chunk) {
+        try {
+          const single = await translateTextSecure(g.fullSourceText, sourceLang, targetLang);
+          translatedSentences.push(single || g.fullSourceText);
+        } catch {
+          translatedSentences.push(g.fullSourceText);
+        }
       }
+    }
+
+    for (let j = 0; j < chunk.length; j++) {
+      processedGroups.push({
+        group: chunk[j],
+        targetText: translatedSentences[j] || chunk[j].fullSourceText
+      });
+    }
+
+    if (i + batchSize < sentenceGroups.length) {
+      await sleep(40);
     }
   }
 
+  // 2. Distribute translated sentences to N ± 1 time windows
   const finalCues: SubtitleCue[] = [];
-  for (const group of groups) {
-    const translatedText = group.translatedText || group.sourceText;
-    const translatedWords = translatedText.split(' ').filter(w => w.trim());
-    const sourceLength = group.sourceText.length || 1;
-    
-    let wordIdx = 0;
-    for (let i = 0; i < group.cues.length; i++) {
-      const cue = group.cues[i];
-      const textLen = cue.sourceText?.length || 0;
-      const ratio = textLen / sourceLength;
-      const wordCount = i === group.cues.length - 1 
-        ? translatedWords.length - wordIdx 
-        : Math.round(translatedWords.length * ratio);
-      
-      const segmentTr = translatedWords.slice(wordIdx, wordIdx + wordCount).join(' ');
-      wordIdx += wordCount;
-
-      finalCues.push({
-        ...cue,
-        sourceText: cue.sourceText,
-        targetText: segmentTr,
-        isAiTranslated: true
-      });
-    }
+  for (const item of processedGroups) {
+    const distributed = distributeTargetTextToWindows(item.group, item.targetText);
+    finalCues.push(...distributed);
   }
 
   return finalCues;
 }
 
 async function translateWithGemmaAI(cues: SubtitleCue[], _detectedLang: string, targetLang: string, apiKey: string): Promise<SubtitleCue[]> {
-  
+  if (!cues || cues.length === 0) return cues;
+
   const targetLangMap: Record<string, string> = {
-    'tr': 'natural Turkish',
-    'en': 'natural English',
-    'de': 'natural German',
+    tr: 'natural Turkish',
+    en: 'natural English',
+    de: 'natural German',
+    es: 'natural Spanish',
+    fr: 'natural French',
+    it: 'natural Italian',
+    pt: 'natural Portuguese',
+    ru: 'natural Russian',
+    zh: 'natural Simplified Chinese',
+    ja: 'natural Japanese',
+    ko: 'natural Korean',
+    ar: 'natural Arabic',
+    hi: 'natural Hindi',
+    nl: 'natural Dutch',
+    pl: 'natural Polish',
+    uk: 'natural Ukrainian',
+    sv: 'natural Swedish',
+    no: 'natural Norwegian',
+    da: 'natural Danish',
+    fi: 'natural Finnish',
+    el: 'natural Greek',
+    cs: 'natural Czech',
+    ro: 'natural Romanian',
+    hu: 'natural Hungarian',
+    id: 'natural Indonesian',
+    vi: 'natural Vietnamese',
+    th: 'natural Thai',
+    he: 'natural Hebrew',
+    fa: 'natural Persian',
+    az: 'natural Azerbaijani',
+    bg: 'natural Bulgarian',
+    sr: 'natural Serbian',
+    sk: 'natural Slovak',
+    hr: 'natural Croatian',
+    bn: 'natural Bengali'
   };
   const targetLangName = targetLangMap[targetLang] || `natural ${targetLang}`;
-  const chunkSize = 100;
-  let translatedCues = [...cues];
 
-  for (let i = 0; i < cues.length; i += chunkSize) {
-    const targetCues = cues.slice(i, i + chunkSize);
-    const jsonPayload = targetCues.map(c => ({
-      id: c.id,
-      text: c.sourceText
+  // 1. Group fragmented cues into full sentences
+  const sentenceGroups = aggregateSentenceCues(cues);
+  const chunkSize = 25; // Optimal sentence batch size for low latency and high reliability
+  const groupTranslationMap = new Map<string, string>();
+
+  for (let i = 0; i < sentenceGroups.length; i += chunkSize) {
+    const targetGroups = sentenceGroups.slice(i, i + chunkSize);
+    const jsonPayload = targetGroups.map(g => ({
+      id: g.id,
+      text: g.fullSourceText
     }));
 
+    const promptText = `You are an expert ${targetLangName} translator. Translate the "text" field of each complete sentence in this JSON array into contextually accurate, natural ${targetLangName}. Maintain conversational flow and tone. Return ONLY a valid JSON array of objects, where each object has the same "id" and the translated "text". No markdown formatting outside the JSON array.\n${JSON.stringify(jsonPayload)}`;
+
+    let responseData: any = null;
+
+    // 1. Primary: Gemma 4 31B IT
     try {
       const response = await smartFetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent?key=${apiKey}`,
@@ -404,56 +509,146 @@ async function translateWithGemmaAI(cues: SubtitleCue[], _detectedLang: string, 
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `You are an expert ${targetLangName} translator. Translate the "text" field of each object in this JSON array into contextually accurate ${targetLangName}. Maintain the flow of conversation across chunks. Return ONLY a valid JSON array of objects, where each object has the same "id" and the translated "text". Do not combine chunks. No markdown formatting outside the JSON array.\n${JSON.stringify(jsonPayload)}`
-              }]
-            }]
+            contents: [{ parts: [{ text: promptText }] }]
           })
         },
-        12000 // 12 second timeout for complex chunking
+        12000
       );
 
       if (response.ok) {
-        const data = await response.json();
-        const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const translatedArr: { id: string, text: string }[] = JSON.parse(jsonMatch[0]);
-          const translatedMap = new Map(translatedArr.map(item => [item.id, item.text]));
-          
-          translatedCues = translatedCues.map(c => {
-            const translatedText = translatedMap.get(c.id);
-            if (translatedText) {
-              return {
-                ...c,
-                targetText: translatedText,
-                isAiTranslated: true
-              };
-            }
-            return c;
-          });
+        responseData = await response.json();
+      }
+    } catch (err) {
+      console.warn('Gemma 4 31B IT request failed, falling back to gemini-3.5-flash-lite:', err);
+    }
+
+    // 2. Secondary Fallback: gemini-3.5-flash-lite or gemini-2.5-flash-lite
+    if (!responseData) {
+      for (const fallbackModel of ['gemini-3.5-flash-lite', 'gemini-2.5-flash-lite', 'gemini-1.5-flash']) {
+        try {
+          const fbRes = await smartFetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${fallbackModel}:generateContent?key=${apiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: promptText }] }]
+              })
+            },
+            10000
+          );
+          if (fbRes.ok) {
+            responseData = await fbRes.json();
+            break;
+          }
+        } catch {
+          // Try next model
         }
       }
-    } catch (e) {
-      console.warn('Failed to parse/fetch Gemma array JSON chunk', e);
     }
-  }
 
-  return translatedCues;
-}
+    if (responseData) {
+      try {
+        const rawText = responseData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        // Clean thinking blocks and markdown fences if present
+        const cleanedText = rawText
+          .replace(/<thought>[\s\S]*?<\/thought>/gi, '')
+          .replace(/```json\s*/gi, '')
+          .replace(/```\s*/gi, '')
+          .trim();
 
-async function translateGTX(text: string, fromLang: string, toLang: string): Promise<string> {
-  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${fromLang}&tl=${toLang}&dt=t&q=${encodeURIComponent(text)}`;
-  const res = await smartFetch(url, undefined, 3000);
-  if (res.ok) {
-    const json = await res.json();
-    if (json[0] && Array.isArray(json[0])) {
-      const fullTr = json[0].map((chunk: any) => chunk[0]).join('').trim();
-      if (fullTr && fullTr !== text) {
-        return fullTr;
+        const jsonMatch = cleanedText.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const translatedArr: { id: string; text: string }[] = JSON.parse(jsonMatch[0]);
+          for (const item of translatedArr) {
+            if (item.id && item.text) {
+              groupTranslationMap.set(item.id, item.text);
+            }
+          }
+        }
+      } catch (parseErr) {
+        console.warn('Failed to parse AI JSON chunk:', parseErr);
       }
     }
   }
+
+  // 2. If AI translation succeeded for groups, distribute to windows; otherwise retain original cues
+  if (groupTranslationMap.size === 0) {
+    return cues;
+  }
+
+  const aiDistributedCues: SubtitleCue[] = [];
+  for (const group of sentenceGroups) {
+    const aiTargetText = groupTranslationMap.get(group.id);
+    if (aiTargetText) {
+      aiDistributedCues.push(...distributeTargetTextToWindows(group, aiTargetText));
+    } else {
+      const existingText = group.cues.map(c => c.targetText || c.sourceText).join(' ');
+      aiDistributedCues.push(...distributeTargetTextToWindows(group, existingText));
+    }
+  }
+
+  return aiDistributedCues;
+}
+
+// Secure client-level translator using Google Chrome extension API & multi-provider fallbacks
+export async function translateTextSecure(text: string, fromLang: string, toLang: string): Promise<string> {
+  if (!text || !text.trim()) return text;
+  const cleanFrom = fromLang === 'auto' ? 'auto' : fromLang;
+
+  // 1. Primary: Google Chrome Extension official endpoint (Clean JSON array, no bot 429 page)
+  try {
+    const url = `https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=${cleanFrom}&tl=${toLang}&q=${encodeURIComponent(text)}`;
+    const res = await smartFetch(url, undefined, 4000);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data[0])) {
+          const combined = data
+            .map((chunk: any) => (Array.isArray(chunk) && typeof chunk[0] === 'string' ? chunk[0] : ''))
+            .filter(Boolean)
+            .join('\n')
+            .trim();
+          if (combined && combined.length > 0) return combined;
+        } else if (typeof data[0] === 'string') {
+          const tr = data[0].trim();
+          if (tr && tr.length > 0) return tr;
+        }
+      }
+    }
+  } catch (e) {
+    // Continue to fallback
+  }
+
+  // 2. Secondary: Google WebApp endpoint
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=webapp&sl=${cleanFrom}&tl=${toLang}&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await smartFetch(url, undefined, 4000);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && Array.isArray(json[0])) {
+        const fullTr = json[0].map((chunk: any) => chunk[0]).join('').trim();
+        if (fullTr && fullTr !== text) return fullTr;
+      }
+    }
+  } catch (e) {
+    // Continue to fallback
+  }
+
+  // 3. Tertiary: MyMemory Translation API
+  try {
+    const langpair = `${cleanFrom === 'auto' ? 'en' : cleanFrom}|${toLang}`;
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langpair}`;
+    const res = await smartFetch(url, undefined, 4000);
+    if (res.ok) {
+      const json = await res.json();
+      if (json?.responseData?.translatedText) {
+        return json.responseData.translatedText.trim();
+      }
+    }
+  } catch (e) {
+    // All fallbacks exhausted
+  }
+
   return text;
 }

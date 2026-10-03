@@ -1,6 +1,6 @@
 {
   "appId": "com.ytceviri.app",
-  "appName": "YT Çeviri",
+  "appName": "YT Translator",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {

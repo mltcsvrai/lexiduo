@@ -7,12 +7,19 @@ export async function getCachedTranscript(videoId: string, sourceLang: string, t
     const data = await get<{ cues: SubtitleCue[], isAiTranslated: boolean }>(cacheKey);
     
     if (data) {
-      // Update LRU timestamp asynchronously
-      get<Record<string, number>>('transcript_cache_index').then((index) => {
-        const newIndex = index || {};
-        newIndex[cacheKey] = Date.now();
-        set('transcript_cache_index', newIndex);
-      }).catch(console.error);
+      // Update LRU timestamp asynchronously and safely
+      try {
+        const indexPromise = get<Record<string, number>>('transcript_cache_index');
+        if (indexPromise && typeof indexPromise.then === 'function') {
+          indexPromise.then((index) => {
+            const newIndex = index || {};
+            newIndex[cacheKey] = Date.now();
+            set('transcript_cache_index', newIndex).catch(() => {});
+          }).catch(() => {});
+        }
+      } catch {
+        // Silently ignore LRU index update error in restricted environments
+      }
       return data;
     }
     return null;

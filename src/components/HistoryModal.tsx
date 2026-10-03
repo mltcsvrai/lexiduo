@@ -3,10 +3,9 @@ import { MonitorPlay, X, Play, Trash2 } from 'lucide-react';
 import { get, set } from 'idb-keyval';
 import { useTranslation } from '../i18n/TranslationContext';
 
-export interface HistoryItem {
-  videoId: string;
-  timestamp: number;
-}
+import type { HistoryItem } from '../types';
+import { enrichHistoryItems } from '../services/videoMetadata';
+export type { HistoryItem };
 
 interface Props {
   isOpen: boolean;
@@ -23,14 +22,21 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, onClose, onLoadVideo }) 
       get<HistoryItem[]>('yt_ceviri_history_list').then(data => {
         if (data && Array.isArray(data)) {
           // Sort by newest first
-          setHistory(data.sort((a, b) => b.timestamp - a.timestamp));
+          const sorted = data.sort((a, b) => b.timestamp - a.timestamp);
+          setHistory(sorted);
+          enrichHistoryItems(sorted).then(({ enrichedItems, hasChanges }) => {
+            if (hasChanges) {
+              setHistory(enrichedItems);
+              set('yt_ceviri_history_list', enrichedItems).catch(() => {});
+            }
+          });
         }
       });
     }
   }, [isOpen]);
 
   const handleClear = async () => {
-    if (confirm(t('clearHistoryConfirm') || 'Geçmişi temizlemek istediğinize emin misiniz?')) {
+    if (confirm(t('clearHistoryConfirm'))) {
       await set('yt_ceviri_history_list', []);
       setHistory([]);
     }
@@ -49,7 +55,7 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, onClose, onLoadVideo }) 
         <div className="p-4 border-b border-slate-700/50 flex items-center justify-between bg-slate-800/50">
           <div className="flex items-center space-x-2">
             <MonitorPlay className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-lg font-bold text-white">Geçmiş</h2>
+            <h2 className="text-lg font-bold text-white">{t('recentHistory')}</h2>
           </div>
           <div className="flex items-center space-x-2">
             {history.length > 0 && (
@@ -73,7 +79,7 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, onClose, onLoadVideo }) 
           {history.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10 text-slate-500">
               <MonitorPlay className="w-12 h-12 mb-3 opacity-20" />
-              <p>Henüz geçmişinizde video bulunmuyor.</p>
+              <p>{t('noHistoryYet')}</p>
             </div>
           ) : (
              history.map((item) => (
@@ -94,8 +100,8 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, onClose, onLoadVideo }) 
                   </div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-200 truncate">
-                    Video ID: {item.videoId}
+                  <p className="text-sm font-semibold text-slate-200 line-clamp-2 leading-snug" title={item.title || item.videoId}>
+                    {item.title || `Video: ${item.videoId}`}
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
                     {new Date(item.timestamp).toLocaleDateString()} {new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}

@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
-import { Search, Settings, Type, Pause, Play, DownloadCloud, MonitorPlay } from 'lucide-react';
-import type { AppUpdateInfo } from '../services/updateService';
+import { Search, Settings, Type, Pause, Play, MonitorPlay, ArrowRight, Home } from 'lucide-react';
 import { useTranslation } from '../i18n/TranslationContext';
+import { SUPPORTED_LANGUAGES } from '../i18n/languages';
 import { useAppStore } from '../store/useAppStore';
+import { CustomSelect, type SelectOption } from './CustomSelect';
 
 interface FloatingDockProps {
   onSearchToggle: () => void;
   onSettingsOpen: () => void;
-  updateInfo: AppUpdateInfo | null;
-  onApplyUpdate: () => void;
+  onHomeClick?: () => void;
+  showHome?: boolean;
 }
 
 export const FloatingDock: React.FC<FloatingDockProps> = ({
   onSearchToggle,
   onSettingsOpen,
-  updateInfo,
-  onApplyUpdate,
+  onHomeClick,
+  showHome = false,
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'subtitle' | 'video' | null>(null);
@@ -35,8 +36,6 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
   const onPlaybackRateChange = useAppStore(s => s.setPlaybackRate);
   const showSubtitleBg = useAppStore(s => s.showSubtitleBg);
   const setShowSubtitleBg = useAppStore(s => s.setShowSubtitleBg);
-  const syncOffset = useAppStore(s => s.syncOffset);
-  const onSyncOffsetChange = useAppStore(s => s.setSyncOffset);
 
   const onLanguageChange = (type: 'source' | 'target', val: string) => {
     if (type === 'source') onSourceLangChange(val);
@@ -47,188 +46,215 @@ export const FloatingDock: React.FC<FloatingDockProps> = ({
     setShowSubtitleBg(!showSubtitleBg);
   };
 
+  const sourceOptions: SelectOption[] = [
+    { value: 'auto', label: t('autoDetect') },
+    ...SUPPORTED_LANGUAGES.map(lang => ({
+      value: lang.code,
+      label: `${lang.nativeName} (${lang.name})`
+    }))
+  ];
+
+  const targetOptions: SelectOption[] = SUPPORTED_LANGUAGES.map(lang => ({
+    value: lang.code,
+    label: `${lang.nativeName} (${lang.name})`
+  }));
+
   return (
-    <div className="fixed bottom-6 left-0 right-0 z-50 flex flex-col items-center justify-end pointer-events-none transition-all duration-300">
+    <div className="fixed bottom-3 sm:bottom-6 pb-safe left-0 right-0 z-50 flex flex-col items-center justify-end pointer-events-none transition-all duration-300 landscape:hidden md:landscape:flex">
       
-      {/* Settings Popover */}
+      {/* Backdrop for closing popovers on tap */}
+      {activeTab && (
+        <div 
+          className="fixed inset-0 bg-black/40 backdrop-blur-[1px] pointer-events-auto z-40 animate-fade-in"
+          onClick={() => setActiveTab(null)}
+        />
+      )}
+
+      {/* Subtitle Settings Popover */}
       {activeTab === 'subtitle' && (
-        <div className="mb-4 w-72 bg-slate-900/90 backdrop-blur-3xl border border-white/10 p-5 rounded-[2rem] shadow-2xl animate-in fade-in slide-in-from-bottom-4 pointer-events-auto">
-          <div className="flex flex-col space-y-5">
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-400 block px-1 uppercase tracking-wider">{t('sourceLang')}</label>
-              <select
+        <div className="mb-3 max-w-[92vw] w-72 sm:w-80 bg-slate-900/95 backdrop-blur-3xl border border-white/10 p-4 sm:p-5 rounded-3xl shadow-2xl animate-in fade-in slide-in-from-bottom-3 pointer-events-auto z-50 max-h-[75vh] overflow-y-auto space-y-4">
+          
+          {/* Language Pair Selector */}
+          <div className="flex items-center space-x-2 bg-black/40 p-2.5 rounded-2xl border border-white/10">
+            <div className="flex-1 min-w-0">
+              <span className="text-[10px] font-bold text-slate-400 block px-1 uppercase mb-1">{t('sourceLang')}</span>
+              <CustomSelect
                 value={sourceLang}
-                onChange={(e) => onLanguageChange('source', e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-red-500 transition-all appearance-none"
-              >
-                <option value="auto">{t('autoDetect')}</option>
-                <option value="en">{t('english')}</option>
-                <option value="de">{t('german')}</option>
-                <option value="tr">{t('turkish')}</option>
-                <option value="es">{t('spanish')}</option>
-                <option value="fr">{t('french')}</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              <label className="text-[11px] font-bold text-slate-400 block px-1 uppercase tracking-wider">{t('targetLang')}</label>
-              <select
-                value={targetLang}
-                onChange={(e) => onLanguageChange('target', e.target.value)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl py-2 px-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-red-500 transition-all appearance-none"
-              >
-                <option value="tr">{t('turkish')}</option>
-                <option value="de">{t('german')}</option>
-                <option value="en">{t('english')}</option>
-                <option value="es">{t('spanish')}</option>
-                <option value="fr">{t('french')}</option>
-              </select>
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-white/10">
-              <span className="text-sm font-semibold text-slate-300">{t('viewMode')}</span>
-              <button
-                onClick={() => onModeChange(subtitleMode === 'SOURCE' ? 'TARGET' : subtitleMode === 'TARGET' ? 'DUAL' : 'SOURCE')}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-all ${
-                  subtitleMode === 'DUAL' 
-                    ? 'bg-red-500 text-white shadow-[0_0_10px_rgba(239,68,68,0.3)]'
-                    : 'bg-white/10 text-white'
-                }`}
-              >
-                {subtitleMode === 'DUAL' ? t('dualLanguage') : subtitleMode === 'TARGET' ? t('targetOnly') : t('sourceOnly')}
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex justify-between text-xs font-medium text-slate-400">
-                <span>{t('subtitleSize')}</span>
-                <span className="bg-black/30 px-2 py-0.5 rounded-md">{fontSize}px</span>
-              </div>
-              <input
-                type="range"
-                min="16"
-                max="48"
-                value={fontSize}
-                onChange={(e) => onFontSizeChange(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-700 rounded-full appearance-none cursor-pointer accent-red-500"
+                onChange={(val) => onLanguageChange('source', val)}
+                options={sourceOptions}
+                direction="down"
+                searchable={true}
+                searchPlaceholder={t('searchLanguagePlaceholder')}
               />
             </div>
             
-            <div className="flex items-center justify-between pt-2 border-t border-white/10">
-              <span className="text-sm font-semibold text-slate-300">{t('background')}</span>
+            <ArrowRight className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-4" />
+
+            <div className="flex-1 min-w-0">
+              <span className="text-[10px] font-bold text-slate-400 block px-1 uppercase mb-1">{t('targetLang')}</span>
+              <CustomSelect
+                value={targetLang}
+                onChange={(val) => onLanguageChange('target', val)}
+                options={targetOptions}
+                direction="down"
+                searchable={true}
+                searchPlaceholder={t('searchLanguagePlaceholder')}
+              />
+            </div>
+          </div>
+
+          {/* Segmented Subtitle Mode Switcher */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold text-slate-400 block px-1">{t('viewMode')}</span>
+            <div className="grid grid-cols-3 p-1 bg-black/40 rounded-xl border border-white/10 gap-1 text-center">
               <button
-                onClick={() => onToggleSubtitleBg()}
-                className={`w-11 h-6 rounded-full transition-colors relative ${
-                  showSubtitleBg ? 'bg-red-500' : 'bg-slate-700'
+                type="button"
+                onClick={() => onModeChange('DUAL')}
+                className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  subtitleMode === 'DUAL'
+                    ? 'bg-red-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
                 }`}
               >
-                <div 
-                  className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
-                    showSubtitleBg ? 'left-6' : 'left-1'
-                  }`} 
-                />
+                {t('dualLanguage')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onModeChange('TARGET')}
+                className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  subtitleMode === 'TARGET'
+                    ? 'bg-red-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {t('targetOnly')}
+              </button>
+              <button
+                type="button"
+                onClick={() => onModeChange('SOURCE')}
+                className={`py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  subtitleMode === 'SOURCE'
+                    ? 'bg-red-600 text-white shadow-md'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {t('sourceOnly')}
               </button>
             </div>
+          </div>
+
+          {/* Font Size Slider */}
+          <div className="space-y-2 pt-1 border-t border-white/10">
+            <div className="flex justify-between text-xs font-semibold text-slate-300">
+              <span>{t('subtitleSize')}</span>
+              <span className="bg-black/40 px-2 py-0.5 rounded-md font-mono text-[11px]">{fontSize}px</span>
+            </div>
+            <input
+              type="range"
+              min="16"
+              max="48"
+              value={fontSize}
+              onChange={(e) => onFontSizeChange(Number(e.target.value))}
+              className="w-full h-1.5 bg-slate-700 rounded-full appearance-none cursor-pointer accent-red-500"
+            />
+          </div>
+          
+          {/* Background Toggle */}
+          <div className="flex items-center justify-between pt-2 border-t border-white/10">
+            <span className="text-xs font-semibold text-slate-300">{t('background')}</span>
+            <button
+              onClick={() => onToggleSubtitleBg()}
+              className={`w-10 h-5 rounded-full transition-colors relative cursor-pointer ${
+                showSubtitleBg ? 'bg-red-600' : 'bg-slate-700'
+              }`}
+            >
+              <div 
+                className={`w-3.5 h-3.5 rounded-full bg-white absolute top-0.75 transition-transform ${
+                  showSubtitleBg ? 'left-5.5' : 'left-1'
+                }`} 
+              />
+            </button>
           </div>
         </div>
       )}
 
+      {/* Video Settings Popover */}
       {activeTab === 'video' && (
-        <div className="mb-4 w-64 bg-slate-900/90 backdrop-blur-3xl border border-white/10 p-5 rounded-[2rem] shadow-2xl animate-in fade-in slide-in-from-bottom-4 pointer-events-auto">
-          <div className="flex flex-col space-y-5">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-300">{t('autoPause')}</span>
-              <button
-                onClick={() => onAutoPauseChange(!autoPause)}
-                className={`p-2.5 rounded-full transition-all ${
-                  autoPause ? 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-white/10 text-slate-300'
-                }`}
-              >
-                {autoPause ? <Pause size={16} /> : <Play size={16} fill="currentColor" />}
-              </button>
-            </div>
+        <div className="mb-3 max-w-[92vw] w-64 sm:w-72 bg-slate-900/95 backdrop-blur-3xl border border-white/10 p-4 sm:p-5 rounded-3xl shadow-2xl animate-in fade-in slide-in-from-bottom-3 pointer-events-auto z-50 max-h-[75vh] overflow-y-auto space-y-4">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-300">{t('autoPause')}</span>
+            <button
+              onClick={() => onAutoPauseChange(!autoPause)}
+              className={`p-2 rounded-xl transition-all cursor-pointer ${
+                autoPause ? 'bg-emerald-500 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)]' : 'bg-white/10 text-slate-400'
+              }`}
+            >
+              {autoPause ? <Pause size={15} /> : <Play size={15} fill="currentColor" />}
+            </button>
+          </div>
 
-            <div className="space-y-3 pt-2 border-t border-white/10">
-              <div className="flex justify-between text-xs font-medium text-slate-400">
-                <span>{t('playbackSpeed')}</span>
-                <span className="bg-black/30 px-2 py-0.5 rounded-md">{playbackRate}x</span>
-              </div>
-              <input
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.25"
-                value={playbackRate}
-                onChange={(e) => onPlaybackRateChange(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-700 rounded-full appearance-none cursor-pointer accent-emerald-500"
-              />
+          <div className="space-y-2 pt-2 border-t border-white/10">
+            <div className="flex justify-between text-xs font-semibold text-slate-300">
+              <span>{t('playbackSpeed')}</span>
+              <span className="bg-black/40 px-2 py-0.5 rounded-md font-mono text-[11px]">{playbackRate}x</span>
             </div>
-
-            <div className="space-y-3 pt-2 border-t border-white/10">
-              <div className="flex justify-between text-xs font-medium text-slate-400">
-                <span>{t('subtitleSync') || 'Timing'}</span>
-                <span className="bg-black/30 px-2 py-0.5 rounded-md">{syncOffset > 0 ? '+' : ''}{syncOffset}s</span>
-              </div>
-              <input
-                type="range"
-                min="-5"
-                max="5"
-                step="0.1"
-                value={syncOffset}
-                onChange={(e) => onSyncOffsetChange(Number(e.target.value))}
-                className="w-full h-1.5 bg-slate-700 rounded-full appearance-none cursor-pointer accent-blue-500"
-              />
-            </div>
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.25"
+              value={playbackRate}
+              onChange={(e) => onPlaybackRateChange(Number(e.target.value))}
+              className="w-full h-1.5 bg-slate-700 rounded-full appearance-none cursor-pointer accent-emerald-500"
+            />
           </div>
         </div>
       )}
 
       {/* Main Dock */}
-      <div className="flex items-center justify-center space-x-1.5 bg-black/60 backdrop-blur-3xl border border-white/10 p-2.5 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.6)] ring-1 ring-white/5 pointer-events-auto">
+      <div className="flex items-center justify-center space-x-1.5 bg-black/60 backdrop-blur-3xl border border-white/10 p-2 sm:p-2.5 rounded-full shadow-[0_8px_32px_rgba(0,0,0,0.6)] ring-1 ring-white/5 pointer-events-auto">
         
+        {showHome && (
+          <>
+            <DockIcon 
+              icon={<Home size={20} strokeWidth={2.5} />} 
+              label={t('home')} 
+              onClick={() => { setActiveTab(null); onHomeClick?.(); }} 
+              color="text-red-400"
+            />
+            <div className="w-px h-7 bg-white/10 mx-1" />
+          </>
+        )}
+
         <DockIcon 
-          icon={<Search size={22} strokeWidth={2.5} />} 
-          label={t('searchVideoPlaceholder').split(' ')[0]} 
+          icon={<Search size={20} strokeWidth={2.5} />} 
+          label={t('openNewVideo')} 
           onClick={() => { setActiveTab(null); onSearchToggle(); }} 
         />
         
-        <div className="w-px h-8 bg-white/10 mx-1" />
+        <div className="w-px h-7 bg-white/10 mx-1" />
 
         <DockIcon 
-          icon={<Type size={22} strokeWidth={2.5} />} 
+          icon={<Type size={20} strokeWidth={2.5} />} 
           label="CC" 
           onClick={() => setActiveTab(activeTab === 'subtitle' ? null : 'subtitle')} 
           active={activeTab === 'subtitle'}
         />
 
         <DockIcon 
-          icon={<MonitorPlay size={22} strokeWidth={2.5} />} 
+          icon={<MonitorPlay size={20} strokeWidth={2.5} />} 
           label="Video" 
           onClick={() => setActiveTab(activeTab === 'video' ? null : 'video')} 
           active={activeTab === 'video'}
         />
 
-        <div className="w-px h-8 bg-white/10 mx-1" />
+        <div className="w-px h-7 bg-white/10 mx-1" />
 
         <DockIcon 
-          icon={<Settings size={22} strokeWidth={2.5} />} 
+          icon={<Settings size={20} strokeWidth={2.5} />} 
           label={t('settings')} 
           onClick={() => { setActiveTab(null); onSettingsOpen(); }} 
         />
-
-        {updateInfo?.hasUpdate && (
-          <>
-            <div className="w-px h-8 bg-white/10 mx-1" />
-            <button 
-              onClick={onApplyUpdate}
-              className="group relative p-3 rounded-full bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white hover:shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all"
-            >
-              <DownloadCloud size={22} strokeWidth={2.5} className="animate-pulse" />
-              <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900 text-white text-[11px] font-bold py-1 px-3 rounded-xl whitespace-nowrap shadow-xl border border-white/10 pointer-events-none">
-                Update (v{updateInfo.latestVersion})
-              </div>
-            </button>
-          </>
-        )}
       </div>
     </div>
   );
@@ -239,26 +265,23 @@ function DockIcon({
   label, 
   onClick, 
   active = false,
-  highlight = false,
   color = "text-slate-200"
 }: { 
   icon: React.ReactNode, 
   label: string, 
   onClick: () => void,
   active?: boolean,
-  highlight?: boolean,
   color?: string
 }) {
   return (
     <button
       onClick={onClick}
-      className={`group relative p-3.5 rounded-full transition-all duration-300 ease-out active:scale-90
+      className={`group relative p-3 min-w-[42px] min-h-[42px] flex items-center justify-center rounded-full transition-all duration-200 active:scale-90 cursor-pointer
         ${active ? 'bg-white/20 shadow-inner' : 'hover:bg-white/10'} 
-        ${highlight ? 'animate-pulse ring-2 ring-purple-500/50 shadow-[0_0_15px_rgba(168,85,247,0.3)]' : ''}
       `}
     >
       <span className={`${color} transition-colors ${active ? 'text-white' : ''}`}>{icon}</span>
-      <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100 transition-all duration-200 bg-slate-900 text-white text-[11px] font-bold py-1.5 px-3.5 rounded-xl whitespace-nowrap shadow-xl border border-white/10 pointer-events-none">
+      <div className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100 transition-all duration-150 bg-slate-900 text-white text-[10px] font-bold py-1 px-2.5 rounded-lg whitespace-nowrap shadow-xl border border-white/10 pointer-events-none">
         {label}
       </div>
     </button>

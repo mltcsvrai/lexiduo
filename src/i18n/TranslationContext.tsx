@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { translations, type Language, type TranslationKey } from './translations';
+import { SUPPORTED_LANGUAGES, LANGUAGE_MAP } from './languages';
 import { get, set } from 'idb-keyval';
 
 interface TranslationContextType {
@@ -11,23 +12,20 @@ interface TranslationContextType {
 const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
 
 export const TranslationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>('tr');
+  const [language, setLanguageState] = useState<Language>('en');
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const loadLanguage = async () => {
       try {
         const storedLang = await get('app_language');
-        if (storedLang && ['tr', 'en', 'de', 'es', 'fr'].includes(storedLang)) {
-          setLanguageState(storedLang as Language);
+        if (storedLang && SUPPORTED_LANGUAGES.some(l => l.code === storedLang)) {
+          const selected = storedLang as Language;
+          setLanguageState(selected);
+          document.documentElement.dir = LANGUAGE_MAP[selected]?.dir || 'ltr';
         } else {
-          // Detect browser language as fallback
-          const browserLang = navigator.language.split('-')[0];
-          if (['tr', 'en', 'de', 'es', 'fr'].includes(browserLang)) {
-            setLanguageState(browserLang as Language);
-          } else {
-            setLanguageState('en');
-          }
+          setLanguageState('en');
+          document.documentElement.dir = 'ltr';
         }
       } catch (err) {
         console.error('Error loading language', err);
@@ -40,6 +38,7 @@ export const TranslationProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const setLanguage = async (lang: Language) => {
     setLanguageState(lang);
+    document.documentElement.dir = LANGUAGE_MAP[lang]?.dir || 'ltr';
     try {
       await set('app_language', lang);
     } catch (err) {
@@ -48,7 +47,7 @@ export const TranslationProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const t = (key: TranslationKey): string => {
-    return translations[language][key] || translations['en'][key] || key;
+    return translations[language]?.[key] || translations['en']?.[key] || key;
   };
 
   if (!isLoaded) return null; // Avoid render flash

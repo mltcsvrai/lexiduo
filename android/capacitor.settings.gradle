@@ -2,14 +2,14 @@
 include ':capacitor-android'
 project(':capacitor-android').projectDir = new File('../node_modules/@capacitor/android/capacitor')
 
+include ':capacitor-app'
+project(':capacitor-app').projectDir = new File('../node_modules/@capacitor/app/android')
+
 include ':capacitor-clipboard'
 project(':capacitor-clipboard').projectDir = new File('../node_modules/@capacitor/clipboard/android')
 
 include ':capacitor-splash-screen'
 project(':capacitor-splash-screen').projectDir = new File('../node_modules/@capacitor/splash-screen/android')
-
-include ':capgo-capacitor-updater'
-project(':capgo-capacitor-updater').projectDir = new File('../node_modules/@capgo/capacitor-updater/android')
 
 include ':capacitor-plugin-send-intent'
 project(':capacitor-plugin-send-intent').projectDir = new File('../node_modules/capacitor-plugin-send-intent/android')

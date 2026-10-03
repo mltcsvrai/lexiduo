@@ -3,6 +3,8 @@ import type { WordTranslation } from '../types';
 import { Volume2, X, Sparkles, Copy, Check } from 'lucide-react';
 import { useTranslation } from '../i18n/TranslationContext';
 import { Clipboard } from '@capacitor/clipboard';
+import { useAppStore } from '../store/useAppStore';
+import { getLanguageBcp47 } from '../i18n/languages';
 
 interface WordTooltipProps {
   translation: WordTranslation | null;
@@ -20,14 +22,17 @@ export const WordTooltip = forwardRef<HTMLDivElement, WordTooltipProps>(({
   style
 }, ref) => {
   const { t } = useTranslation();
+  const sourceLang = useAppStore(s => s.sourceLang);
+  const targetLang = useAppStore(s => s.targetLang);
   const [copied, setCopied] = React.useState(false);
 
   if (!translation && !loading) return null;
 
-  const playAudio = (text: string, isTurkish?: boolean) => {
+  const playAudio = (text: string, isTargetWord?: boolean) => {
     if ('speechSynthesis' in window) {
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = isTurkish ? 'tr-TR' : 'en-US';
+      const activeLang = isTargetWord ? targetLang : (sourceLang === 'auto' ? 'en' : sourceLang);
+      utterance.lang = getLanguageBcp47(activeLang);
       utterance.rate = 0.9;
       window.speechSynthesis.speak(utterance);
     }
@@ -75,13 +80,14 @@ export const WordTooltip = forwardRef<HTMLDivElement, WordTooltipProps>(({
                 <button 
                   onClick={() => playAudio(translation.word, translation.isTargetWord)}
                   className="p-1.5 text-white/70 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all flex items-center justify-center shrink-0"
+                  title={t('listenAudio')}
                 >
                   <Volume2 className="w-4 h-4" />
                 </button>
                 <button 
                   onClick={handleCopy}
                   className="p-1.5 text-white/70 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all flex items-center justify-center shrink-0"
-                  title="Copy to Clipboard"
+                  title={copied ? t('copied') : t('copy')}
                 >
                   {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 </button>
@@ -110,7 +116,7 @@ export const WordTooltip = forwardRef<HTMLDivElement, WordTooltipProps>(({
               <Sparkles className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <div>
                 <span className="text-xs text-slate-400 block font-medium">
-                  {isTurkish ? 'İngilizce Anlamı:' : 'Türkçe Anlamı:'}
+                  {isTurkish ? t('sourceWordMeaning') : t('targetWordMeaning')}
                 </span>
                 <span className="text-sm font-semibold text-red-200">
                   {translation.translation}

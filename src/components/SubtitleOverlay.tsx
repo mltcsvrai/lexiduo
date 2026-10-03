@@ -13,37 +13,32 @@ export const SubtitleOverlay: React.FC = React.memo(() => {
   const fontSize = useAppStore(s => s.fontSize);
   const showSubtitleBg = useAppStore(s => s.showSubtitleBg);
 
-  // O(1) Amortized Linear Search for active cue (Handles overlaps perfectly)
+  // Optimized cue search with micro-gap bridging and latest-cue priority
   const lastIndexRef = useRef(0);
   const currentCue = useMemo(() => {
     if (cues.length === 0) return null;
     const adjustedTime = currentTime + syncOffset;
     
-    let bestIndex = -1;
-    // Fast path: Check around last known index first
-    const startIdx = Math.max(0, lastIndexRef.current - 5);
-    const endIdx = Math.min(cues.length - 1, lastIndexRef.current + 5);
-    
-    for (let i = startIdx; i <= endIdx; i++) {
-      if (adjustedTime >= cues[i].start && adjustedTime <= cues[i].end) {
-        bestIndex = i;
-        break;
+    // 1. Prioritize latest active cue (Search backwards to pick newest sentence immediately on overlaps)
+    for (let i = cues.length - 1; i >= 0; i--) {
+      const cue = cues[i];
+      if (adjustedTime >= cue.start && adjustedTime <= cue.end) {
+        lastIndexRef.current = i;
+        return cue;
       }
     }
 
-    // Fallback: Full linear scan if jumped far
-    if (bestIndex === -1) {
-      for (let i = 0; i < cues.length; i++) {
-        if (adjustedTime >= cues[i].start && adjustedTime <= cues[i].end) {
-          bestIndex = i;
-          break;
-        }
+    // 2. Micro-gap bridging (250ms persistence after cue end, or 100ms early start)
+    // Prevents subtitles from blinking out during 100-300ms natural pauses between speech
+    for (let i = cues.length - 1; i >= 0; i--) {
+      const cue = cues[i];
+      const nextCue = cues[i + 1];
+      const gapEnd = nextCue ? Math.min(cue.end + 0.25, nextCue.start) : cue.end + 0.25;
+      
+      if (adjustedTime >= cue.start - 0.1 && adjustedTime <= gapEnd) {
+        lastIndexRef.current = i;
+        return cue;
       }
-    }
-
-    if (bestIndex !== -1) {
-      lastIndexRef.current = bestIndex;
-      return cues[bestIndex];
     }
     
     return null;
@@ -59,9 +54,6 @@ export const SubtitleOverlay: React.FC = React.memo(() => {
     if (selection) {
       const text = selection.toString().trim();
       if (text.includes(' ')) {
-        // Multi-word selected! Trigger lookup logic directly using window event or global function.
-        // We will dispatch a custom event that App.tsx can listen to, or we can just call window.lookupIdiom
-        // For clean architecture, we'll dispatch a custom DOM event.
         const event = new CustomEvent('yt-ceviri-idiom-lookup', { detail: text });
         window.dispatchEvent(event);
       }
@@ -96,14 +88,15 @@ export const SubtitleOverlay: React.FC = React.memo(() => {
       onPointerUp={handlePointerUp}
       className="w-full flex flex-col items-center justify-center transition-all duration-300 pointer-events-none"
     >
-      <div className={`w-full flex flex-col items-center justify-center space-y-1.5 pointer-events-auto max-w-[90%] sm:max-w-4xl mx-auto text-center px-4 py-2 rounded-xl transition-colors duration-300 ${
-        showSubtitleBg ? 'bg-black/60 backdrop-blur-sm' : 'drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]'
+      <div className={`w-full flex flex-col items-center justify-center space-y-1 sm:space-y-1.5 pointer-events-auto max-w-[96%] sm:max-w-4xl mx-auto text-center px-2.5 py-1.5 sm:px-5 sm:py-2.5 rounded-xl sm:rounded-2xl transition-all duration-300 ${
+        showSubtitleBg ? 'bg-black/75 backdrop-blur-md shadow-2xl border border-white/5' : 'drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]'
       }`}>
 
         {showSource && currentCue.sourceText && (
           <div
+            dir="auto"
             className="font-sans font-bold text-white tracking-wide leading-tight selection:bg-red-500 selection:text-white cursor-text"
-            style={{ fontSize: `${fontSize}px` }}
+            style={{ fontSize: `clamp(13px, 2.8vw, ${fontSize}px)` }}
           >
             {renderInteractiveText(currentCue.sourceText, false)}
           </div>
@@ -111,8 +104,9 @@ export const SubtitleOverlay: React.FC = React.memo(() => {
 
         {showTarget && currentCue.targetText && (
           <div
+            dir="auto"
             className={`font-sans font-extrabold tracking-wide leading-tight cursor-text ${showSource ? 'text-yellow-400' : 'text-white'}`}
-            style={{ fontSize: `${Math.max(16, fontSize - (showSource ? 4 : 0))}px` }}
+            style={{ fontSize: `clamp(12px, 2.5vw, ${Math.max(14, fontSize - (showSource ? 4 : 0))}px)` }}
           >
             {renderInteractiveText(currentCue.targetText, true)}
           </div>

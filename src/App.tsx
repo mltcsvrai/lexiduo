@@ -5,25 +5,29 @@ import { FloatingDock } from './components/FloatingDock';
 import { TopSearchOverlay } from './components/TopSearchOverlay';
 import { ApiKeyModal } from './components/ApiKeyModal';
 import { fetchVideoSubtitles, extractYouTubeId } from './services/transcriptService';
-import { checkAppUpdates, applyInAppUpdate, type AppUpdateInfo } from './services/updateService';
-import { RefreshCw, CheckCircle2, Download, MonitorPlay } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { get, set } from 'idb-keyval';
-import { OnboardingModal } from './components/OnboardingModal';
-import { HistoryModal, type HistoryItem } from './components/HistoryModal';
+import { WelcomeHero } from './components/WelcomeHero';
+import { HistoryModal } from './components/HistoryModal';
+import type { HistoryItem } from './types';
+import { fetchYouTubeMetadata, cacheVideoTitle } from './services/videoMetadata';
 import { useTranslation } from './i18n/TranslationContext';
 import { useAppStore } from './store/useAppStore';
-import { SendIntent } from 'capacitor-plugin-send-intent';
+import { listenToSharedLinks } from './services/sendIntentService';
+import { Clipboard } from '@capacitor/clipboard';
+import { App as CapApp } from '@capacitor/app';
+import { WordDrawer } from './components/WordDrawer';
+import { InteractiveTranscriptPanel } from './components/InteractiveTranscriptPanel';
 
 export function App() {
   const { t } = useTranslation();
   const playerRef = useRef<YouTubePlayerHandle>(null);
+  const lastSaveTimeRef = useRef<number>(0);
+  const lastCheckedClipboardId = useRef<string>('');
   
-  // Local UI States that don't need to be global
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<AppUpdateInfo | null>(null);
-  const [isApplyingUpdate, setIsApplyingUpdate] = useState<boolean>(false);
-  const [updateProgress, setUpdateProgress] = useState<number>(0);
-  const [updateSuccessMsg, setUpdateSuccessMsg] = useState<string | null>(null);
+  // Local UI States
+  const [showWordHint, setShowWordHint] = useState(false);
+  const [clipboardPrompt, setClipboardPrompt] = useState<{ id: string; rawText: string } | null>(null);
 
   // Zustand Global State Selectors
   const videoId = useAppStore(s => s.videoId);
@@ -53,11 +57,6 @@ export function App() {
   const setSyncOffset = useAppStore(s => s.setSyncOffset);
   const lookupWordAction = useAppStore(s => s.lookupWordAction);
   const setActiveWordTranslation = useAppStore(s => s.setActiveWordTranslation);
-
-  // Check for Cloudflare App Live Updates on mount
-  useEffect(() => {
-    checkAppUpdates().then(setUpdateInfo).catch(() => {});
-  }, []);
 
   // IndexedDB Migration and Initialization
   useEffect(() => {
@@ -92,56 +91,83 @@ export function App() {
 
       // Load from IDB
       try {
-        const [savedVideoId, savedKey, savedSourceLang, savedTargetLang, savedOnboarding] = await Promise.all([
+        const [savedVideoId, savedKeyYt, savedKeyGemini, savedSourceLang, savedTargetLang] = await Promise.all([
           get<string>('yt_ceviri_video_id'),
+          get<string>('yt_ceviri_gemini_key'),
           get<string>('gemini_api_key'),
           get<string>('source_lang'),
-          get<string>('target_lang'),
-          get<boolean>('has_completed_onboarding')
+          get<string>('target_lang')
         ]);
         if (savedVideoId) setVideoId(savedVideoId);
-        if (savedKey) setApiKey(savedKey);
+        const resolvedKey = savedKeyYt || savedKeyGemini;
+        if (resolvedKey) setApiKey(resolvedKey);
         if (savedSourceLang) setSourceLang(savedSourceLang);
         if (savedTargetLang) setTargetLang(savedTargetLang);
-        const [savedBg, savedSync] = await Promise.all([
+        const [savedBg, savedSync, savedLimit] = await Promise.all([
           get<boolean>('yt_ceviri_subtitle_bg'),
-          get<number>('yt_ceviri_sync_offset')
+          get<number>('yt_ceviri_sync_offset'),
+          get<number>('yt_ceviri_history_limit')
         ]);
         if (savedBg !== undefined) setShowSubtitleBg(savedBg);
         if (savedSync !== undefined) setSyncOffset(savedSync);
-        if (!savedOnboarding) setShowOnboarding(true);
+        if (savedLimit !== undefined && typeof savedLimit === 'number') {
+          useAppStore.getState().setHistoryLimit(savedLimit);
+        }
       } catch (e) {
         console.error('Failed to load state from DB', e);
-        setShowOnboarding(true);
       }
     }
     initStorage();
   }, []); // Run once on mount
 
-  // Handle 100% In-App Instant Updating with CapacitorUpdater
-  const handleApplyInAppUpdate = async () => {
-    if (!updateInfo?.latestVersion || !updateInfo?.bundleUrl) return;
-    setIsApplyingUpdate(true);
-    setUpdateProgress(0);
+  // Layered Android Hardware Back Button Handling
+  useEffect(() => {
+    let backListener: any = null;
 
-    try {
-      await applyInAppUpdate(
-        updateInfo.latestVersion,
-        updateInfo.bundleUrl,
-        (percent) => setUpdateProgress(percent)
-      );
-      setTimeout(() => {
-        setUpdateInfo(null);
-        setIsApplyingUpdate(false);
-        setUpdateSuccessMsg(`✨ ${t('updateSuccess')}`);
-        setTimeout(() => setUpdateSuccessMsg(null), 4000);
-      }, 500);
-    } catch (err) {
-      setIsApplyingUpdate(false);
-      console.error('Update failed:', err);
-      alert('Güncelleme sırasında bir hata oluştu.');
-    }
-  };
+    const setupBackListener = async () => {
+      try {
+        backListener = await CapApp.addListener('backButton', () => {
+          // 1. Kelime sözlük çekmecesi / popup açıksa kapat (Tam ekranda dahi olsa önce sözlüğü kapat)
+          const store = useAppStore.getState();
+          if (store.activeTokenId || store.activeWordTranslation || store.wordLoading) {
+            store.setActiveTokenId(null);
+            store.setActiveWordTranslation(null);
+            return;
+          }
+          // 2. Tam ekranda video açıksa tam ekrandan çık
+          if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => {});
+            return;
+          }
+          // 3. Modallar açıksa kapat (öncelik sırasıyla)
+          if (store.isSearchOpen) {
+            store.setIsSearchOpen(false);
+            return;
+          }
+          if (store.isSettingsOpen) {
+            store.setIsSettingsOpen(false);
+            return;
+          }
+          if (store.isHistoryOpen) {
+            store.setIsHistoryOpen(false);
+            return;
+          }
+          // 4. Ana ekranda hiçbir şey açık değilse uygulamayı kapat
+          CapApp.exitApp();
+        });
+      } catch (e) {
+        console.warn('Capacitor App backButton listener not supported in web mode:', e);
+      }
+    };
+
+    setupBackListener();
+
+    return () => {
+      if (backListener) {
+        backListener.remove();
+      }
+    };
+  }, []);
 
   // Load saved watch position whenever videoId changes (per-video key to prevent race conditions)
   useEffect(() => {
@@ -155,6 +181,36 @@ export function App() {
     }
     loadSavedTime();
   }, [videoId, setSavedStartTime]);
+
+  // One-time micro hint for word tapping on first video load
+  useEffect(() => {
+    let timer: any = null;
+    if (videoId) {
+      get<boolean>('has_seen_word_hint').then(seen => {
+        if (!seen) {
+          setShowWordHint(true);
+          timer = setTimeout(() => {
+            setShowWordHint(false);
+            set('has_seen_word_hint', true).catch(() => {});
+          }, 4500);
+        }
+      }).catch(() => {});
+    } else {
+      setShowWordHint(false);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [videoId]);
+
+  // Synchronize language choices to IDB
+  useEffect(() => {
+    if (sourceLang) set('source_lang', sourceLang).catch(() => {});
+  }, [sourceLang]);
+
+  useEffect(() => {
+    if (targetLang) set('target_lang', targetLang).catch(() => {});
+  }, [targetLang]);
 
   // Handle Word & Idiom Lookup Events from SubtitleOverlay
   useEffect(() => {
@@ -226,70 +282,88 @@ export function App() {
       setCues([]);
       setVideoId(extracted);
       setActiveWordTranslation(null);
+      set('yt_ceviri_video_id', extracted).catch(() => {});
 
-      // Add to History
-      try {
-        let currentHistory = await get<HistoryItem[]>('yt_ceviri_history_list') || [];
-        // Remove if it already exists to move it to the top
-        currentHistory = currentHistory.filter(item => item.videoId !== extracted);
-        currentHistory.unshift({ videoId: extracted, timestamp: Date.now() });
-        // Cap at 20
-        if (currentHistory.length > 20) {
-          currentHistory = currentHistory.slice(0, 20);
+      // Add to History with Title
+      (async () => {
+        try {
+          const meta = await fetchYouTubeMetadata(extracted);
+          let currentHistory = await get<HistoryItem[]>('yt_ceviri_history_list') || [];
+          // Remove if it already exists to move it to the top
+          currentHistory = currentHistory.filter(item => item.videoId !== extracted);
+          currentHistory.unshift({ videoId: extracted, title: meta.title, timestamp: Date.now() });
+          // Cap at 20
+          if (currentHistory.length > 20) {
+            currentHistory = currentHistory.slice(0, 20);
+          }
+          await set('yt_ceviri_history_list', currentHistory);
+        } catch (e) {
+          console.warn('Failed to save history', e);
         }
-        await set('yt_ceviri_history_list', currentHistory);
-      } catch (e) {
-        console.warn('Failed to save history', e);
-      }
+      })();
     }
   };
 
-  // Check for shared links (SendIntent) from Android
+  // Listen for shared links (SendIntent) from Android OS
   useEffect(() => {
-    let listener: any = null;
+    let cleanupFn: (() => void) | null = null;
 
-    const checkIntent = async () => {
-      try {
-        const result = await (SendIntent as any).checkSendIntentReceived();
-        if (result && (result.url || result.title || result.value)) {
-          const text = result.url || result.title || result.value;
-          const extracted = extractYouTubeId(text);
-          if (extracted && extracted !== useAppStore.getState().videoId) {
-            handleLoadVideo(text);
-          }
-        }
-      } catch (err) {
-        // No intent received
+    listenToSharedLinks((rawText) => {
+      const extracted = extractYouTubeId(rawText);
+      if (extracted && extracted !== useAppStore.getState().videoId) {
+        handleLoadVideo(rawText);
       }
-    };
-
-    const setupIntentListener = async () => {
-      // 1. Check initial intent on app launch (Requires custom patched checkSendIntentReceived)
-      await checkIntent();
-
-      // 2. Listen for intents while app is running in background
-      try {
-        listener = await (SendIntent as any).addListener('appSendActionIntent', (data: any) => {
-          if (data && data.extras) {
-            const text = data.extras['android.intent.extra.TEXT'] || data.extras.url || data.extras.value || data.extras.title;
-            if (text) {
-              const extracted = extractYouTubeId(text);
-              if (extracted && extracted !== useAppStore.getState().videoId) {
-                handleLoadVideo(text);
-              }
-            }
-          }
-        });
-      } catch (e) {
-        console.warn('Failed to add SendIntent listener:', e);
-      }
-    };
-
-    setupIntentListener();
+    }).then((cleanup) => {
+      cleanupFn = cleanup;
+    });
 
     return () => {
-      if (listener) {
-        listener.remove();
+      if (cleanupFn) {
+        cleanupFn();
+      }
+    };
+  }, []);
+
+  // Smart Clipboard Detection: Check for YouTube links on launch and app resume
+  useEffect(() => {
+    const checkClipboardForVideo = async () => {
+      try {
+        const { value } = await Clipboard.read();
+        if (!value || typeof value !== 'string') return;
+        const detectedId = extractYouTubeId(value);
+        if (
+          detectedId &&
+          detectedId !== useAppStore.getState().videoId &&
+          detectedId !== lastCheckedClipboardId.current
+        ) {
+          lastCheckedClipboardId.current = detectedId;
+          setClipboardPrompt({ id: detectedId, rawText: value });
+        }
+      } catch {
+        // Clipboard permission denied or unavailable
+      }
+    };
+
+    // 1. Check on initial mount
+    checkClipboardForVideo();
+
+    // 2. Check when app returns to foreground
+    let appStateHandle: any = null;
+    try {
+      CapApp.addListener('appStateChange', (state) => {
+        if (state.isActive) {
+          checkClipboardForVideo();
+        }
+      }).then((handle) => {
+        appStateHandle = handle;
+      });
+    } catch {
+      // Non-Capacitor environment
+    }
+
+    return () => {
+      if (appStateHandle && appStateHandle.remove) {
+        appStateHandle.remove();
       }
     };
   }, []);
@@ -298,18 +372,11 @@ export function App() {
   const handleSaveApiKey = (key: string) => {
     setApiKey(key);
     set('yt_ceviri_gemini_key', key);
+    set('gemini_api_key', key);
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden mesh-bg text-slate-100 flex flex-col justify-between selection:bg-red-500 selection:text-white relative">
-      {showOnboarding && (
-        <OnboardingModal 
-          onComplete={() => {
-            setShowOnboarding(false);
-            set('has_completed_onboarding', true);
-          }} 
-        />
-      )}
+    <div className="min-h-[100dvh] h-[100dvh] w-full overflow-hidden mesh-bg text-slate-100 flex flex-col justify-between selection:bg-red-500 selection:text-white relative">
       <TopSearchOverlay 
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
@@ -322,106 +389,145 @@ export function App() {
         onLoadVideo={handleLoadVideo}
       />
 
-      <button
-        onClick={() => setIsHistoryOpen(true)}
-        className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/50 backdrop-blur-md px-4 py-2 rounded-full flex items-center space-x-2 transition-all shadow-lg text-slate-300 hover:text-emerald-400 group cursor-pointer"
-      >
-        <MonitorPlay className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
-        <span className="text-sm font-semibold tracking-wide">Geçmiş</span>
-      </button>
-
-      {isApplyingUpdate && (
-        <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center p-6 space-y-4">
-          <div className="w-14 h-14 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-          <h3 className="text-lg font-bold text-white">{t('loadingUpdate')}</h3>
-          <p className="text-xs text-slate-400">{t('pleaseWait')}</p>
-          <div className="w-64 bg-slate-800 h-2 rounded-full overflow-hidden border border-white/10 relative">
-            <div 
-              className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full transition-all duration-300"
-              style={{ width: `${updateProgress}%` }}
-            />
+      {/* Smart Clipboard Video Detected Banner */}
+      {clipboardPrompt && (
+        <div className="fixed top-[calc(1rem+env(safe-area-inset-top))] left-1/2 -translate-x-1/2 z-50 max-w-[92vw] sm:max-w-md w-full bg-slate-900/95 border border-red-500/50 shadow-2xl shadow-red-500/20 rounded-2xl px-4 py-3 flex items-center justify-between gap-3 backdrop-blur-xl animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-semibold text-slate-100 truncate">
+                {t('clipboardVideoDetected')}
+              </span>
+              <span className="text-[11px] text-slate-400 font-mono truncate">
+                {clipboardPrompt.id}
+              </span>
+            </div>
           </div>
-          <p className="text-xs font-bold text-emerald-400">% {updateProgress}</p>
-        </div>
-      )}
-
-      {updateSuccessMsg && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center">
-            <div className="flex flex-col items-center">
-                <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                </div>
-                <h3 className="text-xl font-bold text-white mb-2">{updateSuccessMsg}</h3>
-            </div>
-        </div>
-      )}
-
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col items-center justify-center space-y-6">
-        <div className="w-full relative max-w-5xl aspect-video group rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-slate-900/50 backdrop-blur-xl border border-white/10 flex items-center justify-center">
-          {!videoId ? (
-            <div className="flex flex-col items-center justify-center text-center p-8 space-y-6 max-w-md">
-              <div className="w-24 h-24 bg-gradient-to-br from-indigo-500/20 to-purple-500/20 rounded-full flex items-center justify-center border border-white/10 shadow-lg mb-4 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-500 opacity-20 blur-xl"></div>
-                <MonitorPlay className="w-12 h-12 text-indigo-400 relative z-10" />
-              </div>
-              <h2 className="text-2xl font-bold text-white tracking-tight">YT Çeviri'ye Hoş Geldiniz</h2>
-              <p className="text-slate-300 text-sm leading-relaxed">
-                İzlemek istediğiniz bir YouTube videosunu açmak için sağ alttaki menüden <strong className="text-indigo-400">Arama</strong> butonunu kullanabilir veya doğrudan YouTube uygulamasından <strong className="text-purple-400">Paylaş</strong> diyerek YT Çeviri'yi seçebilirsiniz.
-              </p>
-            </div>
-          ) : (
-            <YouTubePlayer
-              ref={playerRef}
-              videoId={videoId}
-              initialStartTime={savedStartTime}
-              onTimeUpdate={(t) => setCurrentTime(t)}
-              onStateChange={() => {}}
-              externalPauseRequest={externalPause}
-              playbackRate={playbackRate}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                const textToLoad = clipboardPrompt.rawText;
+                setClipboardPrompt(null);
+                handleLoadVideo(textToLoad);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 active:scale-95 text-white text-xs font-medium transition-all shadow-md shadow-red-600/30"
             >
-              {loadingSubtitles && cues.length === 0 ? (
-                <div className="pointer-events-auto flex items-center space-x-2 bg-slate-900/90 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 shadow-2xl animate-pulse">
-                  <RefreshCw className="w-4 h-4 text-red-500 animate-spin" />
-                  <span className="text-xs font-semibold text-slate-300">
-                    {t('loading')}
-                  </span>
-                </div>
-              ) : cues.length === 0 ? (
-                <div className="pointer-events-auto flex flex-col items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl">
-                  <p className="text-slate-300 text-sm font-semibold mb-3">{t('noSubtitles')}</p>
-                </div>
-              ) : (
-                <SubtitleOverlay />
-              )}
-            </YouTubePlayer>
-          )}
+              {t('openFromClipboard')}
+            </button>
+            <button
+              onClick={() => setClipboardPrompt(null)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              title={t('dismiss')}
+            >
+              ✕
+            </button>
+          </div>
         </div>
+      )}
+
+      {/* One-time subtle micro hint */}
+      {showWordHint && cues.length > 0 && (
+        <div className="fixed top-[calc(3.5rem+env(safe-area-inset-top))] sm:top-18 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 border border-red-500/40 text-white text-xs px-4 py-2 rounded-full shadow-2xl backdrop-blur-md flex items-center space-x-2 animate-in fade-in slide-in-from-top-2 duration-300 pointer-events-none">
+          <span>💡</span>
+          <span className="font-semibold text-slate-200">{t('wordHint')}</span>
+        </div>
+      )}
+
+      <main className="flex-1 w-full h-full max-w-7xl mx-auto overflow-hidden flex flex-col justify-start md:justify-center px-0 md:px-6 lg:px-8 pt-safe md:pt-14 lg:pt-16 pb-0 md:pb-24">
+        {!videoId ? (
+          <div className="flex-1 w-full overflow-y-auto custom-scrollbar flex flex-col items-center justify-start pb-28">
+            <WelcomeHero onLoadVideo={handleLoadVideo} />
+          </div>
+        ) : (
+          <div className="w-full h-full flex flex-col md:grid md:grid-cols-12 md:gap-6 md:items-center overflow-hidden">
+            {/* SOL SÜTUN: Mobil dikeyde en üstte, landscape'te tam ekran, tablette 7 col, masaüstünde ortalı */}
+            <div className="w-full shrink-0 md:shrink md:col-span-7 lg:col-span-12 xl:max-w-5xl xl:mx-auto md:w-full landscape:fixed landscape:inset-0 landscape:z-30 landscape:md:static landscape:md:z-auto">
+              <div className="w-full aspect-video rounded-none md:rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] bg-slate-900/50 backdrop-blur-xl border-b md:border border-white/10 flex items-center justify-center relative">
+                <YouTubePlayer
+                  ref={playerRef}
+                  videoId={videoId}
+                  initialStartTime={savedStartTime}
+                  onTimeUpdate={(t) => {
+                    setCurrentTime(t);
+                    if (videoId && t > 2) {
+                      const now = Date.now();
+                      if (now - lastSaveTimeRef.current > 4000) {
+                        lastSaveTimeRef.current = now;
+                        set(`watch_history_${videoId}`, Math.floor(t)).catch(() => {});
+                      }
+                    }
+                  }}
+                  onStateChange={() => {}}
+                  externalPauseRequest={externalPause}
+                  playbackRate={playbackRate}
+                  onVideoTitle={(title) => {
+                    cacheVideoTitle(videoId, title);
+                    (async () => {
+                      try {
+                        const list = await get<HistoryItem[]>('yt_ceviri_history_list');
+                        if (list && Array.isArray(list)) {
+                          let hasChange = false;
+                          const updated = list.map(item => {
+                            if (item.videoId === videoId && (!item.title || item.title.startsWith('Video ('))) {
+                              hasChange = true;
+                              return { ...item, title };
+                            }
+                            return item;
+                          });
+                          if (hasChange) {
+                            await set('yt_ceviri_history_list', updated);
+                          }
+                        }
+                      } catch (err) {
+                        console.warn('Failed to update title from player:', err);
+                      }
+                    })();
+                  }}
+                >
+                  {loadingSubtitles && cues.length === 0 ? (
+                    <div className="pointer-events-auto flex items-center space-x-2 bg-slate-900/90 backdrop-blur-md px-5 py-3 rounded-2xl border border-white/10 shadow-2xl animate-pulse">
+                      <RefreshCw className="w-4 h-4 text-red-500 animate-spin" />
+                      <span className="text-xs font-semibold text-slate-300">
+                        {t('loading')}
+                      </span>
+                    </div>
+                  ) : cues.length === 0 ? (
+                    <div className="pointer-events-auto flex flex-col items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-white/10 shadow-2xl">
+                      <p className="text-slate-300 text-sm font-semibold mb-3">{t('noSubtitles')}</p>
+                    </div>
+                  ) : (
+                    <SubtitleOverlay />
+                  )}
+                </YouTubePlayer>
+              </div>
+            </div>
+
+            {/* SAĞ SÜTUN (TABLET SPLIT-VIEW): 768px-1024px arasında sağ tarafta interaktif transkript */}
+            <div className="hidden md:flex lg:hidden md:col-span-5 h-[65vh] bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-4 overflow-hidden shadow-2xl flex-col">
+              <InteractiveTranscriptPanel onSeek={(time) => playerRef.current?.seekTo(time)} />
+            </div>
+
+            {/* MOBİL DİKEY ALT PANEL (< md): Videonun hemen altında scrollable altyazı & kelime öğrenme alanı */}
+            <div className="flex-1 md:hidden w-full overflow-y-auto px-4 py-4 pb-28 space-y-3 landscape:hidden">
+              <InteractiveTranscriptPanel onSeek={(time) => playerRef.current?.seekTo(time)} />
+            </div>
+          </div>
+        )}
       </main>
 
-      {updateInfo?.hasUpdate && !isApplyingUpdate && (
-        <div className="fixed bottom-24 right-6 z-50 bg-emerald-950/95 border border-emerald-500/50 text-white p-4 rounded-2xl shadow-2xl backdrop-blur-xl flex items-center space-x-3 animate-bounce">
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
-            <Download className="w-5 h-5 text-emerald-400" />
-          </div>
-          <div>
-            <h4 className="text-xs font-bold text-emerald-300">{t('newUpdateAvailable')}</h4>
-            <p className="text-[11px] text-emerald-200/80">v{updateInfo.latestVersion}</p>
-          </div>
-          <button
-            type="button"
-            onClick={handleApplyInAppUpdate}
-            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-xl shadow transition-all shrink-0 cursor-pointer"
-          >
-            {t('applyUpdate')}
-          </button>
-        </div>
-      )}
+      {/* Global Bottom Sheet Word Drawer for Mobile & Tablet */}
+      <WordDrawer />
 
       <FloatingDock 
         onSearchToggle={() => setIsSearchOpen(true)}
         onSettingsOpen={() => setIsSettingsOpen(true)}
-        updateInfo={updateInfo}
-        onApplyUpdate={handleApplyInAppUpdate}
+        onHomeClick={() => {
+          setVideoId('');
+          set('yt_ceviri_video_id', '').catch(() => {});
+        }}
+        showHome={Boolean(videoId)}
       />
 
       <ApiKeyModal 
@@ -429,13 +535,6 @@ export function App() {
         onClose={() => setIsSettingsOpen(false)}
         currentKey={apiKey}
         onSave={handleSaveApiKey}
-        onCheckUpdates={async () => {
-          const res = await checkAppUpdates();
-          if (!res.hasUpdate) {
-            alert('Uygulamanız güncel.');
-          }
-          setUpdateInfo(res);
-        }}
       />
     </div>
   );

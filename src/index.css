@@ -73,3 +73,17 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(239, 68, 68, 0.8);
 }
+
+/* Safe Area Utilities for Mobile Notches & Gesture Bars */
+.pt-safe {
+  padding-top: max(2.5rem, env(safe-area-inset-top, 36px));
+}
+.pb-safe {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+}
+.pl-safe {
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+}
+.pr-safe {
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+}

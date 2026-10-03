@@ -46,19 +46,21 @@ export const WordToken: React.FC<WordTokenProps> = ({ token, isTargetWord, token
       <span
         ref={refs.setReference}
         onClick={handleWordClick}
-        className="inline-block cursor-pointer hover:text-yellow-300 hover:scale-[1.15] active:scale-95 transition-transform drop-shadow-md px-[2px] pointer-events-auto"
+        className="inline-block cursor-pointer hover:text-yellow-300 hover:scale-[1.12] active:scale-95 transition-transform drop-shadow-md px-1 sm:px-[2px] py-0.5 sm:py-0 rounded pointer-events-auto"
       >
         {token}
       </span>
       {isActive && (
-        <WordTooltip
-          ref={refs.setFloating}
-          style={floatingStyles}
-          translation={activeWordTranslation}
-          loading={wordLoading}
-          onClose={handleClose}
-          isTurkish={isTargetWord}
-        />
+        <div className="hidden lg:block">
+          <WordTooltip
+            ref={refs.setFloating}
+            style={floatingStyles}
+            translation={activeWordTranslation}
+            loading={wordLoading}
+            onClose={handleClose}
+            isTurkish={isTargetWord}
+          />
+        </div>
       )}
     </>
   );

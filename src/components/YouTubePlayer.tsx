@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { Maximize, Minimize, History } from 'lucide-react';
+import { useTranslation } from '../i18n/TranslationContext';
 
 export interface YouTubePlayerHandle {
   toggleFullscreen: () => void;
@@ -14,6 +15,7 @@ interface YouTubePlayerProps {
   externalPauseRequest?: boolean;
   playbackRate?: number;
   onFullscreenToggle?: (isFullscreen: boolean) => void;
+  onVideoTitle?: (title: string) => void;
   children?: React.ReactNode;
 }
 
@@ -32,8 +34,10 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
   externalPauseRequest,
   playbackRate = 1,
   onFullscreenToggle,
+  onVideoTitle,
   children
 }, ref) => {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const playerWrapperRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
@@ -76,9 +80,18 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       setIsFullscreen(active);
       if (onFullscreenToggle) onFullscreenToggle(active);
     };
+
+    const handlePopState = () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+
     document.addEventListener('fullscreenchange', handleFsChange);
+    window.addEventListener('popstate', handlePopState);
     return () => {
       document.removeEventListener('fullscreenchange', handleFsChange);
+      window.removeEventListener('popstate', handlePopState);
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
   }, [onFullscreenToggle]);
@@ -133,7 +146,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           // Auto-resume from saved watch progress
           if (initialStartTime) {
             event.target.seekTo(initialStartTime, true);
-            setResumedToast(`Kaldığınız yerden devam ediyor: ${Math.floor(initialStartTime/60)}:${Math.floor(initialStartTime%60).toString().padStart(2,'0')}`);
+            setResumedToast(`${t('resumedToastPrefix')}: ${Math.floor(initialStartTime/60)}:${Math.floor(initialStartTime%60).toString().padStart(2,'0')}`);
             setTimeout(() => setResumedToast(null), 4000);
           }
           // Initialize playback rate
@@ -142,6 +155,15 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
           event.target.playVideo();
           startTimer();
           handleUserInteraction();
+
+          try {
+            const videoData = event.target.getVideoData?.();
+            if (videoData && videoData.title && onVideoTitle) {
+              onVideoTitle(videoData.title);
+            }
+          } catch {
+            // Ignore error
+          }
         },
         onStateChange: (event: any) => {
           const playing = event.data === 1;
@@ -163,7 +185,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         const time = playerRef.current.getCurrentTime();
         onTimeUpdate(time);
       }
-    }, 200);
+    }, 100);
   };
 
   const stopTimer = () => {
@@ -186,13 +208,16 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     if (!document.fullscreenElement) {
       playerWrapperRef.current.requestFullscreen().then(() => {
         setIsFullscreen(true);
+        try {
+          window.history.pushState({ fullscreen: true }, '');
+        } catch {}
       }).catch(err => {
         console.warn('Fullscreen request failed:', err);
       });
     } else {
       document.exitFullscreen().then(() => {
         setIsFullscreen(false);
-      });
+      }).catch(() => {});
     }
   };
 
@@ -214,7 +239,7 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
       {!isReady && (
         <div className="absolute inset-0 bg-slate-950 flex flex-col items-center justify-center space-y-3 z-30">
           <div className="w-10 h-10 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-sm font-medium text-slate-300">YouTube Oynatıcı Yükleniyor...</span>
+          <span className="text-sm font-medium text-slate-300">{t('playerLoading')}</span>
         </div>
       )}
 
@@ -226,36 +251,32 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
         </div>
       )}
 
-      {/* Fullscreen Toggle Button */}
+      {/* Fullscreen Toggle Button - Always Accessible & Persistent */}
       <button
         onClick={toggleFullscreen}
-        className={`absolute z-40 bg-slate-950/85 hover:bg-red-600 backdrop-blur-xl text-white px-3 py-1.5 rounded-xl border border-white/20 shadow-2xl flex items-center space-x-1.5 text-xs font-semibold transition-all duration-300 ${
-          isControlsVisible
-            ? 'opacity-100 pointer-events-auto translate-y-0'
-            : 'opacity-0 pointer-events-none translate-y-2'
-        } ${
-          isFullscreen ? 'bottom-16 right-4' : 'bottom-14 right-4'
+        className={`absolute z-40 bg-black/25 hover:bg-black/60 active:scale-90 backdrop-blur-sm text-white/70 hover:text-white p-2.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl border border-white/10 shadow-lg flex items-center space-x-1.5 text-xs font-medium transition-all duration-200 pointer-events-auto cursor-pointer ${
+          isFullscreen ? 'bottom-16 right-4' : 'bottom-3 right-3 sm:bottom-6 sm:right-6'
         }`}
-        title={isFullscreen ? 'Tam Ekrandan Çık' : 'Tam Ekran Yap (Altyazılar Dahil)'}
+        title={isFullscreen ? t('exitFullscreenTitle') : t('fullscreenTitle')}
       >
         {isFullscreen ? (
           <>
-            <Minimize className="w-3.5 h-3.5 text-red-400" />
-            <span>Küçült</span>
+            <Minimize className="w-4 h-4 sm:w-4 sm:h-4 text-red-400" />
+            <span className="hidden sm:inline">{t('exitFullscreen')}</span>
           </>
         ) : (
           <>
-            <Maximize className="w-3.5 h-3.5 text-white" />
-            <span>Tam Ekran</span>
+            <Maximize className="w-4 h-4 sm:w-4 sm:h-4 text-white" />
+            <span className="hidden sm:inline">{t('fullscreen')}</span>
           </>
         )}
       </button>
 
       {/* Dynamic Subtitles Overlay Layer */}
-      <div className={`absolute left-0 right-0 z-30 pointer-events-none flex justify-center px-4 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+      <div className={`absolute left-0 right-0 z-30 pointer-events-none flex justify-center px-3 sm:px-4 transition-all duration-300 ease-out ${
         isControlsVisible
-          ? 'bottom-32 sm:bottom-40' // Move up more when dock/controls are visible
-          : 'bottom-8 sm:bottom-12'
+          ? 'bottom-16 sm:bottom-20' // Gentle lift when controls are visible
+          : 'bottom-4 sm:bottom-8'
       }`}>
         {children}
       </div>

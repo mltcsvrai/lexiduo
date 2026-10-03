@@ -1,91 +1,73 @@
-# YT Çeviri (YouTube Context-Aware Translator)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/mltcsvrai/yt-translate-android/master/assets/logo.png" alt="YT Çeviri Logo" width="110" />
+</p>
 
-![YT Çeviri Logo](https://raw.githubusercontent.com/mltcsvrai/yt-translate-android/main/assets/logo.png)
+<h1 align="center">YT Çeviri</h1>
 
-**YT Çeviri** is an open-source, powerful mobile Android application designed to help you learn languages by providing context-aware, instantaneous translations of YouTube video subtitles. It leverages the power of AI (Google Gemini) directly in your subtitle-watching experience.
+<p align="center">
+  <strong>Context-aware, AI-powered YouTube subtitle translator for Android.</strong><br>
+  Learn languages naturally by understanding words and idioms in context while watching videos.
+</p>
 
-## ✨ Features
+<p align="center">
+  <a href="https://github.com/mltcsvrai/yt-translate-android/releases/latest"><img src="https://img.shields.io/github/v/release/mltcsvrai/yt-translate-android?color=blue&label=Release" alt="Latest Release"></a>
+  <a href="https://github.com/mltcsvrai/yt-translate-android/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
+  <a href="https://capacitorjs.com"><img src="https://img.shields.io/badge/Capacitor-8-119EFF.svg?logo=capacitor&logoColor=white" alt="Capacitor"></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-18-61DAFB.svg?logo=react&logoColor=white" alt="React"></a>
+</p>
 
-- **Context-Aware Translations**: Powered by Google's Gemini AI, clicking any word in the subtitle gives you the exact meaning of that word *within the context of the sentence*.
-- **Idiom & Phrase Highlighting**: The AI intelligently detects multi-word idioms or phrases (e.g., "piece of cake") and highlights them together, preventing awkward word-by-word translations.
-- **Native Android Share Intent**: Directly share any YouTube video from the official YouTube app to YT Çeviri to instantly open and translate it!
-- **Over-The-Air (OTA) Live Updates**: Powered by Capgo, the app receives silent, lightning-fast background updates without needing to download a new APK every time.
-- **Dynamic Subtitle Sync**: YouTube's auto-generated subtitles often suffer from delays. YT Çeviri allows you to dynamically adjust the subtitle offset (-5s to +5s) right from the video player to get perfect lip-sync.
-- **Cloudflare Edge Proxy**: A lightning-fast, edge-deployed Cloudflare Worker proxies and caches YouTube metadata efficiently, completely bypassing CORS issues.
-- **Bring Your Own Key (BYOK)**: The app is entirely open-source and free. Users simply input their own Google Gemini API key to activate the intelligent translations.
+<p align="center">
+  <a href="https://github.com/mltcsvrai/yt-translate-android/releases/latest/download/app-release.apk">
+    <img src="https://img.shields.io/badge/Download-Release%20APK-success?style=for-the-badge&logo=android" alt="Download APK" />
+  </a>
+</p>
 
-## 📥 Download & Install
+---
 
-**For Mobile Users:** You don't need to build the app from scratch! 
-1. Go to the [Releases page](https://github.com/mltcsvrai/yt-translate-android/releases).
-2. Download the latest `app-release.apk` file to your Android device.
-3. Install the APK, open the app, enter your Gemini API key, and start watching!
+## ✨ Highlights
 
-## 🚀 How It Works (Bring Your Own API Key)
+- 🧠 **Context-Aware Translation**: Translates subtitle words within sentence context using Google Gemini.
+- 🧩 **Idiom & Phrase Grouping**: Automatically identifies idioms and phrasal verbs as single units.
+- 📲 **YouTube Share Intent**: Share any video directly from the official YouTube app to start watching.
+- ⏱️ **Audio-Subtitle Sync**: On-the-fly subtitle offset adjustment (-5s to +5s) for delayed captions.
+- 🔑 **Bring Your Own Key (BYOK)**: 100% free and open source. Use your own free Gemini API key.
 
-This project does not ship with a hardcoded API key to remain free and open-source. 
-When you first open the app, you will be greeted with an **Onboarding Screen**. 
-1. Select your target language.
-2. Enter your **Google Gemini API Key**. (You can get one for free at [Google AI Studio](https://aistudio.google.com/)).
-3. Start watching by searching a video or sharing one from the YouTube app!
+---
+
+## 🚀 Quick Start
+
+1. **Download APK**: Grab the latest [`app-release.apk`](https://github.com/mltcsvrai/yt-translate-android/releases/latest/download/app-release.apk) and install it on your Android phone.
+2. **Add API Key**: Open the app and paste your free key from [Google AI Studio](https://aistudio.google.com/).
+3. **Start Learning**: Search any YouTube video or share directly from the YouTube app.
+
+---
 
 ## 🛠 Tech Stack
 
-- **Frontend**: React (Vite), TypeScript, TailwindCSS
-- **Mobile Container**: Ionic Capacitor 8 (Android)
-- **Live Updates**: Capgo Capacitor Updater
-- **Backend / Proxy**: Cloudflare Workers
-- **AI Engine**: Google Gemini API
+- **Frontend**: React, TypeScript, TailwindCSS, Lucide Icons
+- **Mobile Container**: Capacitor 8 (Android)
+- **AI & Metadata**: Google Gemini API, Cloudflare Workers
 
-## 📦 Installation & Build Instructions
+---
 
-### Prerequisites
-- Node.js (v18+)
-- Android Studio (for compiling the APK)
-- Cloudflare Wrangler CLI (for backend deployment)
+## 💻 Development
 
-### 1. Setup the Web App
 ```bash
-# Clone the repository
+# Clone & install
 git clone https://github.com/mltcsvrai/yt-translate-android.git
 cd yt-translate-android
-
-# Install dependencies
 npm install
 
-# Start the dev server
+# Start local web dev
 npm run dev
+
+# Build Android Release APK
+npm run build && npx cap sync android
+cd android && ./gradlew assembleRelease
 ```
 
-### 2. Deploy the Cloudflare Worker
-The worker is needed to securely proxy YouTube metadata.
-```bash
-cd cloudflare-worker
-npm install
+---
 
-# Deploy to your own Cloudflare account
-npx wrangler deploy
-```
+## 📄 License
 
-### 3. Build the Android APK
-```bash
-# Build the React app
-npm run build
-
-# Sync files to the Capacitor Android project
-npx cap sync android
-
-# Compile the APK
-cd android
-./gradlew assembleDebug assembleRelease
-```
-Your compiled APKs will be available in `android/app/build/outputs/apk/`.
-
-## 🤝 Contributing
-
-Contributions, issues, and feature requests are welcome! 
-Feel free to check the [issues page](https://github.com/mltcsvrai/yt-translate-android/issues).
-
-## 📝 License
-
-This project is open-source and available under the [MIT License](LICENSE).
+This project is licensed under the [MIT License](LICENSE).

@@ -151,6 +151,7 @@ export default {
     // Endpoint 3: YouTube Transcript Extraction
     if (url.pathname === '/api/transcript') {
       const videoId = url.searchParams.get('v');
+      const sourceLang = url.searchParams.get('lang') || 'auto';
       if (!videoId) {
         return new Response(JSON.stringify({ error: 'Missing videoId' }), {
           status: 400,

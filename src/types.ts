@@ -28,15 +28,23 @@ export interface VideoInfo {
   duration?: string;
 }
 
+export interface HistoryItem {
+  videoId: string;
+  title?: string;
+  timestamp: number;
+}
+
 export interface AppSettings {
   subtitleMode: SubtitleMode;
-  fontSize: number; // 14 to 28
+  fontSize: number;
   autoPauseOnWordClick: boolean;
   apiKey: string;
   translationProvider: 'gemini' | 'deepl' | 'auto';
   fontFamily: string;
   showBackground: boolean;
-  bgOpacity: number; // 0 to 100
-  sourceLang: string; // 'auto', 'en', 'de', 'tr', etc.
-  targetLang: string; // 'tr', 'en', 'de', etc.
+  bgOpacity: number;
+  sourceLang: string;
+  targetLang: string;
+  historyLimit?: number;
 }
+
