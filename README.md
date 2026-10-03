@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/mltcsvrai/yt-translate-android/master/assets/logo.png" alt="YT Translator Logo" width="110" />
+  <img src="assets/logo.png" alt="YT Translator Logo" width="110" />
 </p>
 
 <h1 align="center">YT Translator</h1>
