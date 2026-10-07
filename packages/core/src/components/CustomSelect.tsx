@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check, Search } from 'lucide-react';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 
 export interface SelectOption {
   value: string;

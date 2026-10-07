@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { set } from 'idb-keyval';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import { useAppStore } from '../store/useAppStore';
 import { HISTORY_LIMIT_OPTIONS } from '../types';
 

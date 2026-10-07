@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef, useCallback } from 'react';
 import { Maximize, Minimize, History, ChevronDown, PauseCircle } from 'lucide-react';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import { useAppStore } from '../store/useAppStore';
 
 

@@ -12,7 +12,7 @@ import {
   Loader2,
   FileText
 } from 'lucide-react';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import { SUPPORTED_LANGUAGES, getLanguageDisplayName } from '../i18n/languages';
 import { useAppStore } from '../store/useAppStore';
 import type { 

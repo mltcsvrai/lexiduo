@@ -13,7 +13,7 @@ import {
   ChevronUp,
   Pipette
 } from 'lucide-react';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import { useAppStore } from '../store/useAppStore';
 import { SUPPORTED_LANGUAGES } from '../i18n/languages';
 import { CustomSelect, type SelectOption } from './CustomSelect';

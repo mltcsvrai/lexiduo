@@ -1,6 +1,6 @@
 import React from 'react';
 import { Search, Settings, Type, Download, Home, Layers } from 'lucide-react';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import { useAppStore } from '../store/useAppStore';
 
 export interface FloatingDockProps {

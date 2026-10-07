@@ -1,16 +1,9 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { translations, type Language, type TranslationKey } from './translations';
 import { SUPPORTED_LANGUAGES, LANGUAGE_MAP } from './languages';
 import { get, set } from 'idb-keyval';
 import { useAppStore } from '../store/useAppStore';
-
-interface TranslationContextType {
-  language: Language;
-  setLanguage: (lang: Language) => void;
-  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
-}
-
-export const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
+import { TranslationContext } from './translationContextDef';
 
 export const TranslationProvider: React.FC<{ children: React.ReactNode; initialLoaded?: boolean }> = ({ children, initialLoaded }) => {
   const [language, setLanguageState] = useState<Language>('en');
@@ -71,5 +64,3 @@ export const TranslationProvider: React.FC<{ children: React.ReactNode; initialL
     </TranslationContext.Provider>
   );
 };
-
-export { useTranslation } from './useTranslation';

@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { WordToken } from './WordToken';
 import { useAppStore } from '../store/useAppStore';
 import { Sparkles, RefreshCw } from 'lucide-react';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 
 interface InteractiveTranscriptPanelProps {
   onSeek?: (time: number) => void;

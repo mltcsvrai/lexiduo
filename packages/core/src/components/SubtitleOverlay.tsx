@@ -2,7 +2,7 @@ import React, { useRef, useMemo, useState, useCallback } from 'react';
 import { GripHorizontal } from 'lucide-react';
 import { WordToken } from './WordToken';
 import { useAppStore } from '../store/useAppStore';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import { getLanguageDisplayName } from '../i18n/languages';
 import {
   hexToRgba,

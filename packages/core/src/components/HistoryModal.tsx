@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MonitorPlay, X, Play, Trash2 } from 'lucide-react';
 import { get, set } from 'idb-keyval';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import type { HistoryItem } from '../types';
 import { enrichHistoryItems } from '../services/videoMetadata';
 export type { HistoryItem };

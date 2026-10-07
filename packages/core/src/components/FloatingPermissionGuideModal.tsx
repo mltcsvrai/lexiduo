@@ -16,7 +16,7 @@ import {
   requestAccessibility,
   type FloatingPermissionsStatus 
 } from '../services/floatingSubtitleService';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 
 export interface FloatingPermissionGuideModalProps {
   isOpen: boolean;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Settings, X, Eye, EyeOff, Sparkles, Globe, Languages, Cpu, ExternalLink, ShieldCheck, Lock, ChevronDown, ChevronUp, HelpCircle, CheckCircle2, AlertCircle, AlertTriangle, WifiOff, Loader2 } from 'lucide-react';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import type { Language } from '../i18n/translations';
 import { SUPPORTED_LANGUAGES } from '../i18n/languages';
 import { CustomSelect, type SelectOption } from './CustomSelect';

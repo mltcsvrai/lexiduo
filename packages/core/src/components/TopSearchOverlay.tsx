@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, X, Video, Clipboard as ClipboardIcon, Play, Clock } from 'lucide-react';
 import { get } from 'idb-keyval';
 import { Clipboard } from '@capacitor/clipboard';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import { useAppStore } from '../store/useAppStore';
 import type { HistoryItem } from '../types';
 import { HistoryLimitPicker } from './HistoryLimitPicker';

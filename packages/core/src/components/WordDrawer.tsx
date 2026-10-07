@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Volume2, X, Sparkles, Copy, Check } from 'lucide-react';
-import { useTranslation } from '../i18n/TranslationContext';
+import { useTranslation } from '../i18n/useTranslation';
 import { Clipboard } from '@capacitor/clipboard';
 import { useAppStore } from '../store/useAppStore';
 import { getLanguageBcp47 } from '../i18n/languages';
