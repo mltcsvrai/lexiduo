@@ -10,7 +10,7 @@ interface TranslationContextType {
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
 }
 
-const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
+export const TranslationContext = createContext<TranslationContextType | undefined>(undefined);
 
 export const TranslationProvider: React.FC<{ children: React.ReactNode; initialLoaded?: boolean }> = ({ children, initialLoaded }) => {
   const [language, setLanguageState] = useState<Language>('en');
@@ -72,10 +72,4 @@ export const TranslationProvider: React.FC<{ children: React.ReactNode; initialL
   );
 };
 
-export const useTranslation = () => {
-  const context = useContext(TranslationContext);
-  if (context === undefined) {
-    throw new Error('useTranslation must be used within a TranslationProvider');
-  }
-  return context;
-};
+export { useTranslation } from './useTranslation';

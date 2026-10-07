@@ -44,7 +44,7 @@ export function encodeVint(val: number): Uint8Array {
   }
 }
 
-export function ebmlElement(id: number[], payload: Uint8Array): Uint8Array {
+function ebmlElement(id: number[], payload: Uint8Array): Uint8Array {
   const sizeBytes = encodeVint(payload.length);
   const out = new Uint8Array(id.length + sizeBytes.length + payload.length);
   out.set(id, 0);
@@ -67,7 +67,7 @@ export function ebmlString(id: number[], str: string): Uint8Array {
   return ebmlElement(id, new TextEncoder().encode(str));
 }
 
-export function ebmlFloat64(id: number[], val: number): Uint8Array {
+function ebmlFloat64(id: number[], val: number): Uint8Array {
   const buf = new Uint8Array(8);
   new DataView(buf.buffer).setFloat64(0, val, false);
   return ebmlElement(id, buf);

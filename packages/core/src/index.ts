@@ -108,7 +108,8 @@ export {
 export { useAppStore } from './store/useAppStore';
 
 // i18n
-export { TranslationProvider, useTranslation } from './i18n/TranslationContext';
+export { TranslationProvider, TranslationContext } from './i18n/TranslationContext';
+export { useTranslation } from './i18n/useTranslation';
 export { SUPPORTED_LANGUAGES, LANGUAGE_MAP, BCP47_MAP, getLanguageBcp47, getLanguageDisplayName } from './i18n/languages';
 export type { Language, LanguageInfo, TranslationKey } from './i18n/types';
 

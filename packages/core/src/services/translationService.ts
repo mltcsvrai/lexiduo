@@ -106,7 +106,7 @@ export async function translateTextSecure(text: string, fromLang: string, toLang
         }
       }
     }
-  } catch (e) {
+  } catch {
     // Continue to fallback
   }
 
@@ -121,7 +121,7 @@ export async function translateTextSecure(text: string, fromLang: string, toLang
         if (fullTr && fullTr !== text) return fullTr;
       }
     }
-  } catch (e) {
+  } catch {
     // Continue to fallback
   }
 
@@ -136,7 +136,7 @@ export async function translateTextSecure(text: string, fromLang: string, toLang
         return json.responseData.translatedText.trim();
       }
     }
-  } catch (e) {
+  } catch {
     // All fallbacks exhausted
   }
 
