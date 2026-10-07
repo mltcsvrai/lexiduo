@@ -17,5 +17,20 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(packageJson.version)
   },
-  plugins: [react(), tailwindcss(), youtubeDevProxyPlugin()]
+  plugins: [react(), tailwindcss(), youtubeDevProxyPlugin()],
+  build: {
+    chunkSizeWarningLimit: 800,
+    rolldownOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules/lucide-react')) {
+            return 'vendor-icons';
+          }
+          if (id.includes('packages/core/src/i18n/locales')) {
+            return 'locales-i18n';
+          }
+        }
+      }
+    }
+  }
 });
