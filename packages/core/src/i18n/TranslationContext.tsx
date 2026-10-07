@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useState, useEffect } from 'react';
 import { translations, type Language, type TranslationKey } from './translations';
 import { SUPPORTED_LANGUAGES, LANGUAGE_MAP } from './languages';
 import { get, set } from 'idb-keyval';
