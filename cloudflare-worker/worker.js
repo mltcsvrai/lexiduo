@@ -6,12 +6,41 @@
  */
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env, _ctx) {
     const url = new URL(request.url);
+    const origin = request.headers.get('Origin');
+    const isAllowedOrigin = (orig) => {
+      if (!orig) return true;
+      try {
+        const u = new URL(orig);
+        if (
+          u.hostname === 'localhost' ||
+          u.hostname === '127.0.0.1' ||
+          u.protocol === 'capacitor:' ||
+          u.hostname === 'yt-ceviri.pages.dev'
+        ) {
+          return true;
+        }
+
+        if (env && env.ALLOWED_ORIGINS) {
+          const allowedList = env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
+          if (allowedList.some((allowed) => allowed === orig || allowed === u.hostname)) {
+            return true;
+          }
+        }
+
+        return false;
+      } catch {
+        return false;
+      }
+    };
+
+    const allowedOrigin = origin ? (isAllowedOrigin(origin) ? origin : 'null') : '*';
     const corsHeaders = {
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': allowedOrigin,
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-App-Token',
+      'Vary': 'Origin',
     };
 
     if (request.method === 'OPTIONS') {
@@ -21,11 +50,26 @@ export default {
     // Endpoint 1: App Version & Live Update Manifest
     // Now served statically via Cloudflare Assets from the /public directory!
 
-    // Security Token Check for APIs
+    // Security Token Check for APIs (SEC-001 & SEC-002)
     if (url.pathname.startsWith('/api/')) {
-      const token = url.searchParams.get('app_token');
-      if (token !== 'ytceviri_secure_2026') {
-        return new Response(JSON.stringify({ error: 'Unauthorized Access' }), { status: 401, headers: corsHeaders });
+      if (!env || !env.APP_TOKEN) {
+        return new Response(JSON.stringify({ error: 'Worker configuration error: APP_TOKEN secret is required' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const authHeader = request.headers.get('Authorization');
+      const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+      const customHeaderToken = request.headers.get('X-App-Token');
+      const queryParamToken = url.searchParams.get('app_token');
+      const providedToken = bearerToken || customHeaderToken || queryParamToken;
+
+      if (!providedToken || providedToken !== env.APP_TOKEN) {
+        return new Response(JSON.stringify({ error: 'Unauthorized Access' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
     }
 
@@ -64,96 +108,8 @@ export default {
     // Endpoint 2.5: YouTube Audio Stream Proxy
     if (url.pathname === '/api/audio') {
       const videoId = url.searchParams.get('v');
-      if (!videoId) {
-        return new Response(JSON.stringify({ error: 'Missing videoId' }), { status: 400, headers: corsHeaders });
-      }
-
-      try {
-        const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-        });
-        let apiKey = '';
-        if (watchRes.body) {
-          const reader = watchRes.body.getReader();
-          const decoder = new TextDecoder();
-          let chunk = '';
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            chunk += decoder.decode(value, { stream: true });
-            const keyMatch = chunk.match(/"INNERTUBE_API_KEY":"([^"]+)"/);
-            if (keyMatch) {
-              apiKey = keyMatch[1];
-              await reader.cancel();
-              break;
-            }
-            if (chunk.length > 2000) chunk = chunk.slice(-1000);
-          }
-        }
-
-        const playerRes = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
-          body: JSON.stringify({
-            context: { client: { clientName: 'IOS', clientVersion: '19.28.1', osName: 'iOS', osVersion: '17.5.1' } },
-            videoId
-          })
-        });
-        
-        if (!playerRes.ok) {
-          const errText = await playerRes.text();
-          return new Response(JSON.stringify({ 
-            error: `YouTube API returned ${playerRes.status}`, 
-            details: errText.slice(0, 200) 
-          }), { status: playerRes.status, headers: corsHeaders });
-        }
-
-        const playerData = await playerRes.json();
-        const adaptiveFormats = playerData?.streamingData?.adaptiveFormats || [];
-        const basicFormats = playerData?.streamingData?.formats || [];
-        const allFormats = [...adaptiveFormats, ...basicFormats];
-
-        // Find best audio format (webm or mp4, prioritizing audio-only with a reasonable bitrate)
-        let audioFormat = allFormats.find(f => f.mimeType && f.mimeType.includes('audio/webm'));
-        if (!audioFormat) {
-          audioFormat = allFormats.find(f => f.mimeType && f.mimeType.includes('audio/mp4'));
-        }
-        if (!audioFormat) {
-          audioFormat = allFormats.find(f => f.mimeType && (f.mimeType.includes('audio/') || f.mimeType.includes('video/mp4')));
-        }
-
-        if (!audioFormat || !audioFormat.url) {
-          return new Response(JSON.stringify({ 
-            error: 'No streamable audio format found. Video might be ciphered or restricted.',
-            playability: playerData?.playabilityStatus,
-            hasAdaptive: adaptiveFormats.length,
-            hasBasic: basicFormats.length
-          }), { status: 404, headers: corsHeaders });
-        }
-
-        // Fetch the actual audio stream and proxy it
-        const audioRes = await fetch(audioFormat.url, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-        });
-
-        const responseHeaders = new Headers(corsHeaders);
-        responseHeaders.set('Content-Type', audioFormat.mimeType);
-        
-        return new Response(audioRes.body, {
-          status: audioRes.status,
-          headers: responseHeaders
-        });
-      } catch (err) {
-        return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: corsHeaders });
-      }
-    }
-
-    // Endpoint 3: YouTube Transcript Extraction
-    if (url.pathname === '/api/transcript') {
-      const videoId = url.searchParams.get('v');
-      const sourceLang = url.searchParams.get('lang') || 'auto';
-      if (!videoId) {
-        return new Response(JSON.stringify({ error: 'Missing videoId' }), {
+      if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+        return new Response(JSON.stringify({ error: 'Invalid or missing YouTube videoId format' }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -186,7 +142,222 @@ export default {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
           body: JSON.stringify({
-            context: { client: { clientName: 'ANDROID', clientVersion: '20.10.38' } },
+            context: {
+              client: {
+                clientName: 'ANDROID',
+                clientVersion: '20.10.38',
+                androidSdkVersion: 34
+              }
+            },
+            videoId
+          })
+        });
+        
+        if (!playerRes.ok) {
+          const errText = await playerRes.text();
+          return new Response(JSON.stringify({ 
+            error: `YouTube API returned ${playerRes.status}`, 
+            details: errText.slice(0, 200) 
+          }), { status: playerRes.status, headers: corsHeaders });
+        }
+
+        const playerData = await playerRes.json();
+        const adaptiveFormats = playerData?.streamingData?.adaptiveFormats || [];
+        const basicFormats = playerData?.streamingData?.formats || [];
+        const allFormats = [...adaptiveFormats, ...basicFormats];
+
+        // Find best audio format with direct URL (preferring itag 140 AAC or itag 251 Opus)
+        let audioFormat = allFormats.find(f => f && f.itag === 140 && f.url);
+        if (!audioFormat) {
+          audioFormat = allFormats.find(f => f && f.itag === 251 && f.url);
+        }
+        if (!audioFormat) {
+          audioFormat = allFormats.find(f => f && f.mimeType && f.mimeType.includes('audio/webm') && f.url);
+        }
+        if (!audioFormat) {
+          audioFormat = allFormats.find(f => f && f.mimeType && f.mimeType.includes('audio/mp4') && f.url);
+        }
+        if (!audioFormat) {
+          audioFormat = allFormats.find(f => f && f.mimeType && f.mimeType.includes('audio/') && f.url);
+        }
+        if (!audioFormat) {
+          audioFormat = allFormats.find(f => f && (f.itag === 18 || (f.mimeType && f.mimeType.includes('video/mp4'))) && f.url);
+        }
+
+        if (!audioFormat || !audioFormat.url) {
+          return new Response(JSON.stringify({ 
+            error: 'No streamable audio format found. Video might be ciphered or restricted.',
+            playability: playerData?.playabilityStatus,
+            hasAdaptive: adaptiveFormats.length,
+            hasBasic: basicFormats.length
+          }), { status: 404, headers: corsHeaders });
+        }
+
+        // Fetch the actual audio stream and proxy it
+        const audioRes = await fetch(audioFormat.url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+
+        const responseHeaders = new Headers(corsHeaders);
+        responseHeaders.set('Content-Type', audioFormat.mimeType);
+        
+        return new Response(audioRes.body, {
+          status: audioRes.status,
+          headers: responseHeaders
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // Endpoint 2.6: YouTube Video Stream Proxy
+    if (url.pathname === '/api/video') {
+      const videoId = url.searchParams.get('v');
+      const resolution = url.searchParams.get('res') || '720p';
+      if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+        return new Response(JSON.stringify({ error: 'Invalid or missing YouTube videoId format' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      try {
+        const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        let apiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+        if (watchRes.body) {
+          const reader = watchRes.body.getReader();
+          const decoder = new TextDecoder();
+          let chunk = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunk += decoder.decode(value, { stream: true });
+            const keyMatch = chunk.match(/"INNERTUBE_API_KEY":"([^"]+)"/);
+            if (keyMatch) {
+              apiKey = keyMatch[1];
+              await reader.cancel();
+              break;
+            }
+            if (chunk.length > 2000) chunk = chunk.slice(-1000);
+          }
+        }
+
+        const playerRes = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+          body: JSON.stringify({
+            context: {
+              client: {
+                clientName: 'ANDROID',
+                clientVersion: '20.10.38',
+                androidSdkVersion: 34
+              }
+            },
+            videoId
+          })
+        });
+
+        if (!playerRes.ok) {
+          const errText = await playerRes.text();
+          return new Response(JSON.stringify({ 
+            error: `YouTube API returned ${playerRes.status}`, 
+            details: errText.slice(0, 200) 
+          }), { status: playerRes.status, headers: corsHeaders });
+        }
+
+        const playerData = await playerRes.json();
+        const formats = [
+          ...(playerData?.streamingData?.formats || []),
+          ...(playerData?.streamingData?.adaptiveFormats || [])
+        ].filter(f => f && typeof f.url === 'string' && f.url.startsWith('http'));
+
+        let selected = null;
+        if (resolution === '360p') {
+          selected = formats.find(f => f.itag === 18) || formats.find(f => f.height <= 360 && f.mimeType?.includes('video'));
+        } else if (resolution === '1080p') {
+          selected = formats.find(f => f.height === 1080) || formats.find(f => f.itag === 22) || formats.find(f => f.itag === 18);
+        } else {
+          // 720p default: prioritize progressive with audio (itag 22, then itag 18), then adaptive
+          selected = formats.find(f => f.itag === 22) || formats.find(f => f.itag === 18) || formats.find(f => f.height === 720);
+        }
+
+        if (!selected) {
+          selected = formats.find(f => f.mimeType?.includes('video/mp4')) || formats[0];
+        }
+
+        if (!selected || !selected.url) {
+          return new Response(JSON.stringify({ 
+            error: 'No streamable video format found'
+          }), { status: 404, headers: corsHeaders });
+        }
+
+        const videoStreamRes = await fetch(selected.url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+
+        const responseHeaders = new Headers(corsHeaders);
+        responseHeaders.set('Content-Type', selected.mimeType || 'video/mp4');
+        if (selected.contentLength) {
+          responseHeaders.set('Content-Length', selected.contentLength);
+        }
+
+        return new Response(videoStreamRes.body, {
+          status: videoStreamRes.status,
+          headers: responseHeaders
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: corsHeaders });
+      }
+    }
+
+    // Endpoint 3: YouTube Transcript Extraction
+    if (url.pathname === '/api/transcript') {
+      const videoId = url.searchParams.get('v');
+      const rawLang = url.searchParams.get('lang') || 'auto';
+      const sourceLang = /^[a-zA-Z0-9_-]{2,10}$/.test(rawLang) ? rawLang : 'auto';
+      if (!videoId || !/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+        return new Response(JSON.stringify({ error: 'Invalid or missing YouTube videoId format' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      try {
+        const watchRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        let apiKey = '';
+        if (watchRes.body) {
+          const reader = watchRes.body.getReader();
+          const decoder = new TextDecoder();
+          let chunk = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunk += decoder.decode(value, { stream: true });
+            const keyMatch = chunk.match(/"INNERTUBE_API_KEY":"([^"]+)"/);
+            if (keyMatch) {
+              apiKey = keyMatch[1];
+              await reader.cancel();
+              break;
+            }
+            if (chunk.length > 2000) chunk = chunk.slice(-1000);
+          }
+        }
+
+        const playerRes = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+          body: JSON.stringify({
+            context: {
+              client: {
+                clientName: 'ANDROID',
+                clientVersion: '20.10.38',
+                androidSdkVersion: 34
+              }
+            },
             videoId
           })
         });
@@ -214,7 +385,7 @@ export default {
           selectedTrack = captionTracks.find((t) => t.languageCode === 'en' || t.languageCode?.startsWith('en')) || captionTracks[0];
         }
 
-        const trackLang = selectedTrack.languageCode?.split('-')[0] || 'en';
+        const trackLang = selectedTrack.languageCode?.replace(/^a\./, '').split('-')[0] || 'en';
         let baseUrl = selectedTrack.baseUrl;
         if (!baseUrl.includes('&fmt=')) {
           baseUrl += '&fmt=srv3';

@@ -1,0 +1,98 @@
+@import "tailwindcss";
+@source "../../../packages/core";
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 font-sans antialiased overflow-x-hidden select-none;
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(220, 38, 38, 0.12) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(15, 23, 42, 0.9) 0px, transparent 50%);
+    min-height: 100vh;
+  }
+}
+
+/* Custom Utilities & Animations */
+.mesh-bg {
+  background: 
+    radial-gradient(circle at 15% 50%, rgba(30, 27, 75, 0.7), transparent 60%),
+    radial-gradient(circle at 85% 30%, rgba(136, 19, 55, 0.5), transparent 60%),
+    radial-gradient(circle at 50% 80%, rgba(2, 6, 23, 1), transparent 60%);
+  background-color: #020617; /* Very dark slate */
+  background-size: 200% 200%;
+  animation: meshAnim 20s ease-in-out infinite alternate;
+}
+
+@keyframes meshAnim {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+  100% { background-position: 0% 50%; }
+}
+
+.text-shadow {
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -90%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -100%) scale(1);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Safe Area Utilities for Mobile Notches & Gesture Bars */
+.pt-safe {
+  padding-top: max(2.5rem, env(safe-area-inset-top, 36px));
+}
+.pb-safe {
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));
+}
+.pl-safe {
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+}
+.pr-safe {
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+}

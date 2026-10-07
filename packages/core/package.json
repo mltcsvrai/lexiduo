@@ -1,0 +1,21 @@
+{
+  "name": "@ytceviri/core",
+  "version": "0.0.2",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@capacitor/clipboard": "^8.0.1",
+    "@capacitor/core": "^8.4.2",
+    "@capacitor/filesystem": "^8.1.4",
+    "@capacitor/preferences": "^8.0.0",
+    "@floating-ui/react": "^0.27.20",
+    "capacitor-plugin-send-intent": "^0.0.2",
+    "idb-keyval": "^6.3.0",
+    "lucide-react": "^1.25.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "zustand": "^5.0.14"
+  }
+}

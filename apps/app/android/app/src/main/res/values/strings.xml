@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">YT Translator</string>
+    <string name="title_activity_main">YT Translator</string>
+    <string name="package_name">com.ytceviri.app</string>
+    <string name="custom_url_scheme">com.ytceviri.app</string>
+    <string name="accessibility_service_name">YT Translator Subtitle &amp; Ad Detector</string>
+    <string name="accessibility_service_description">Detects YouTube ads and player state for subtitle synchronization.</string>
+    <string name="notification_listener_service_name">YT Translator Playback Monitor</string>
+    <string name="overlay_notification_title">YT Translator Subtitle Overlay</string>
+    <string name="overlay_notification_text">YouTube subtitles synchronized on screen</string>
+    <string name="overlay_ai_fallback_btn">✨ Translate with AI / Whisper</string>
+    <string name="overlay_subtitles_loading">⏳ Loading Subtitles… </string>
+    <string name="overlay_subtitles_translating">⏳ Translating…</string>
+    <string name="overlay_ad_frozen">⏳ [Ad — Subtitles Paused]</string>
+    <string name="overlay_ad_waiting">Resuming when YouTube ad finishes</string>
+    <string name="overlay_waiting_subtitles">● YT Translator — Waiting for subtitles…</string>
+    <string name="overlay_waiting_speech">● YT Translator — Waiting for speech…</string>
+    <string name="overlay_paused">❚❚ YT Translator — Paused</string>
+</resources>

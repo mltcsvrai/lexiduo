@@ -2,6 +2,13 @@ name = "yt-ceviri-api"
 main = "worker.js"
 compatibility_date = "2026-07-21"
 
+# Environment Secrets:
+# Configure the mandatory API authentication token secret using:
+#   npx wrangler secret put APP_TOKEN
+# Optional allowed origins:
+#   npx wrangler secret put ALLOWED_ORIGINS
+
 [assets]
 directory = "public"
 binding = "ASSETS"
+

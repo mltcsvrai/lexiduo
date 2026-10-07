@@ -1,11 +1,17 @@
 {
-  "name": "yt-translator",
+  "name": "yt-translator-monorepo",
   "private": true,
   "version": "0.0.2",
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/app"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "npm --workspace apps/app run dev",
+    "build": "npm --workspace apps/app run build",
+    "build:all": "npm --workspace apps/app run build",
+    "test": "vitest run",
     "deploy-ota": "node scripts/deploy-ota.js",
     "lint": "oxlint",
     "preview": "vite preview",
@@ -15,8 +21,10 @@
     "@capacitor/app": "^8.1.2",
     "@capacitor/clipboard": "^8.0.1",
     "@capacitor/core": "^8.4.2",
+    "@capacitor/filesystem": "^8.1.4",
     "@capacitor/splash-screen": "^8.0.2",
     "@floating-ui/react": "^0.27.20",
+    "@huggingface/transformers": "^4.3.0",
     "capacitor-plugin-send-intent": "^0.0.2",
     "idb-keyval": "^6.3.0",
     "lucide-react": "^1.25.0",

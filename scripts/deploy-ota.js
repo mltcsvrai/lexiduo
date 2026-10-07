@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ROOT_DIR = path.resolve(__dirname, '..');
-const DIST_DIR = path.join(ROOT_DIR, 'dist');
+const DIST_DIR = path.join(ROOT_DIR, 'apps', 'app', 'dist');
 const WORKER_PUBLIC_DIR = path.join(ROOT_DIR, 'cloudflare-worker', 'public');
 const DIST_ZIP_PATH = path.join(WORKER_PUBLIC_DIR, 'dist.zip');
 const WORKER_VERSION_JSON = path.join(WORKER_PUBLIC_DIR, 'version.json');
@@ -55,12 +55,13 @@ try {
   execSync(`cd "${DIST_DIR}" && zip -r "${DIST_ZIP_PATH}" .`, { stdio: 'inherit' });
   console.log(`✅ Zip tamamlandı!`);
   
+  const workerBase = (process.env.WORKER_API_BASE_URL || process.env.VITE_WORKER_API_BASE_URL || 'https://your-worker.workers.dev').replace(/\/+$/, '');
   const versionData = {
     version: newVersion,
     minAppVersion: '1.0.0',
     releaseNotes: 'Otomatik OTA Güncellemesi (v' + newVersion + ')',
-    downloadUrl: 'https://yt-ceviri-api.erencloudflare.workers.dev/download',
-    bundleUrl: 'https://yt-ceviri-api.erencloudflare.workers.dev/dist.zip',
+    downloadUrl: `${workerBase}/download`,
+    bundleUrl: `${workerBase}/dist.zip`,
     updatedAt: new Date().toISOString()
   };
   fs.writeFileSync(WORKER_VERSION_JSON, JSON.stringify(versionData, null, 2));

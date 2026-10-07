@@ -2,7 +2,7 @@
   "version": "0.0.2",
   "minAppVersion": "1.0.0",
   "releaseNotes": "Otomatik OTA Güncellemesi (v0.0.2)",
-  "downloadUrl": "https://yt-ceviri-api.erencloudflare.workers.dev/download",
-  "bundleUrl": "https://yt-ceviri-api.erencloudflare.workers.dev/dist.zip",
+  "downloadUrl": "https://your-worker.workers.dev/download",
+  "bundleUrl": "https://your-worker.workers.dev/dist.zip",
   "updatedAt": "2026-07-27T20:27:33.538Z"
 }
