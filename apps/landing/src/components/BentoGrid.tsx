@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layers, Brain, Mic, BookOpen, ScrollText, ShieldCheck, Sparkles } from 'lucide-react';
+import { Layers, Brain, Video, BookOpen, ScrollText, ShieldCheck, Sparkles } from 'lucide-react';
 
 export const BentoGrid: React.FC = () => {
   return (
@@ -63,22 +63,22 @@ export const BentoGrid: React.FC = () => {
             </div>
           </div>
 
-          {/* Card 3: On-Device Whisper AI */}
+          {/* Card 3: Polymorphic Local & Stream Player */}
           <div className="glass-panel glass-panel-hover rounded-3xl p-8 flex flex-col justify-between">
             <div className="space-y-4">
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                <Mic className="w-6 h-6" />
+                <Video className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-bold text-white">
-                On-Device Whisper AI (Offline STT)
+                Polymorphic Dual Player
               </h3>
               <p className="text-slate-300 text-sm leading-relaxed">
-                Transcribe captionless local videos completely offline using lightweight Whisper WASM/ONNX speech recognition (~39 MB model) with zero server audio transmission.
+                Seamlessly play online YouTube streams or local media files (MP4, MKV) with multi-track subtitle selection and synchronized controls.
               </p>
             </div>
 
             <div className="mt-6 pt-4 border-t border-white/10 text-xs text-emerald-400 font-semibold">
-              <span>Web Audio 16kHz PCM &bull; Offline Privacy</span>
+              <span>MP4 & MKV &bull; Multi-Track Subtitles</span>
             </div>
           </div>
 

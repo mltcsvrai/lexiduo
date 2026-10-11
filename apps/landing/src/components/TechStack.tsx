@@ -19,7 +19,7 @@ export const TechStack: React.FC = () => {
       category: 'Machine Learning & AI',
       icon: Cpu,
       color: 'text-emerald-400',
-      items: ['Google Gemini AI', 'Google Gemma', 'Whisper WASM / ONNX', 'Web Audio 16kHz PCM']
+      items: ['Google Gemini AI', 'Context Translation', 'Cloudflare Workers Proxy', 'Web Speech API']
     },
     {
       category: 'Architecture & License',

@@ -19,7 +19,7 @@ export const Faq: React.FC = () => {
     },
     {
       q: 'Are my local video files ever uploaded to an external server?',
-      a: 'Never. When you play local videos with offline transcription, audio extraction and Whisper AI speech recognition run 100% locally on your device using Web Audio 16kHz PCM extraction and an on-demand WASM/ONNX model (~39 MB). Your media never leaves your phone.'
+      a: 'Never. When you play local videos in Lexiduo, media playback runs 100% locally on your device with hardware acceleration. Your media files and personal data never leave your phone.'
     },
     {
       q: 'Which languages are supported?',

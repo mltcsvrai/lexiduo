@@ -33,7 +33,7 @@ export const InstallGuide: React.FC = () => {
                 Lexiduo APK
               </h3>
               <p className="text-slate-300 text-sm">
-                Signed release build featuring the unified master architecture (YouTube streaming, floating overlay, and local Whisper AI).
+                Signed release build featuring the unified master architecture (YouTube streaming, floating overlay, and dual subtitles).
               </p>
             </div>
 

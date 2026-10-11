@@ -44,11 +44,11 @@
 The project is organized as a clean npm workspaces monorepo:
 
 ```
-ytceviri/
+lexiduo/
 ├── packages/
 │   └── core/                     # Shared UI components, dictionary service, i18n, and types
 ├── apps/
-│   └── app/                      # Unified master app (YouTube + Local Video + Floating Overlay + Whisper AI)
+│   └── app/                      # Unified master app (YouTube + Local Video + Floating Overlay)
 ├── patches/                      # Upstream patches (Capacitor SendIntent)
 └── package.json                  # Monorepo workspaces coordinator
 ```
@@ -60,8 +60,7 @@ ytceviri/
 - **Monorepo**: npm workspaces
 - **Frontend Core**: React 19, TypeScript, TailwindCSS 4, Lucide Icons, Zustand 5, IndexedDB (`idb-keyval`)
 - **Mobile Container**: Capacitor 8, Android SDK 36 (Java 21)
-- **Local AI & Audio**: Web Audio API (`OfflineAudioContext` 16kHz PCM), `@huggingface/transformers` (WASM / ONNX)
-- **Cloud Translation Engine**: Google Gemma 4 31B IT, Gemini 3.5 Flash Lite, Cloudflare Workers proxy
+- **Cloud Translation Engine**: Google Gemini AI
 
 ---
 

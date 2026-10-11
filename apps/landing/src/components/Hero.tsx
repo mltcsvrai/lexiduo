@@ -18,7 +18,7 @@ export const Hero: React.FC = () => {
             <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-indigo-500/10 via-cyan-500/10 to-indigo-500/10 border border-indigo-500/30 shadow-inner backdrop-blur-md">
               <Sparkles className="w-4 h-4 text-cyan-400 animate-pulse" />
               <span className="text-xs sm:text-sm font-semibold gradient-accent-text tracking-wide">
-                Google Gemini AI &bull; On-Device Whisper &bull; GNU GPL v3
+                Google Gemini AI &bull; Free & Open Source &bull; GNU GPL v3
               </span>
             </div>
 
@@ -79,9 +79,9 @@ export const Hero: React.FC = () => {
               <div className="space-y-1">
                 <div className="flex items-center space-x-1.5 text-emerald-400 text-xs font-semibold uppercase tracking-wider">
                   <Cpu className="w-3.5 h-3.5" />
-                  <span>Dual AI Engine</span>
+                  <span>AI Translation</span>
                 </div>
-                <p className="text-sm font-bold text-white">Gemini + Whisper</p>
+                <p className="text-sm font-bold text-white">Google Gemini</p>
               </div>
 
               <div className="space-y-1">

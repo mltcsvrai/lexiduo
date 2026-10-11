@@ -126,7 +126,7 @@ export const Footer: React.FC = () => {
             </span>
             <span className="flex items-center space-x-1 text-slate-400">
               <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Gemini &bull; Whisper</span>
+              <span>Google Gemini AI</span>
             </span>
           </div>
         </div>
