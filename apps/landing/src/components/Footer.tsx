@@ -44,11 +44,6 @@ export const Footer: React.FC = () => {
             </h4>
             <ul className="space-y-2 text-sm text-slate-400">
               <li>
-                <a href="#simulator" className="hover:text-cyan-400 transition-colors">
-                  Live Simulator
-                </a>
-              </li>
-              <li>
                 <a href="#features" className="hover:text-white transition-colors">
                   Floating Overlay
                 </a>

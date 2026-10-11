@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Menu, X, Sparkles, Smartphone } from 'lucide-react';
+import { Download, Menu, X, Smartphone } from 'lucide-react';
 
 const GithubIcon: React.FC<{ className?: string }> = ({ className = 'w-4 h-4' }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -46,10 +46,6 @@ export const Navbar: React.FC = () => {
 
           {/* Desktop Nav Links */}
           <div className="hidden md:flex items-center space-x-8">
-            <a href="#simulator" className="text-sm font-medium text-slate-300 hover:text-white transition-colors flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-cyan-400" />
-              Live Simulator
-            </a>
             <a href="#features" className="text-sm font-medium text-slate-300 hover:text-white transition-colors">
               Features
             </a>
@@ -113,13 +109,6 @@ export const Navbar: React.FC = () => {
       {/* Mobile Drawer */}
       {mobileMenuOpen && (
         <div className="md:hidden glass-panel border-b border-white/10 px-4 pt-3 pb-6 space-y-3">
-          <a
-            href="#simulator"
-            onClick={() => setMobileMenuOpen(false)}
-            className="block px-3 py-2 rounded-lg text-base font-medium text-slate-200 hover:bg-white/5"
-          >
-            ✨ Live Simulator
-          </a>
           <a
             href="#features"
             onClick={() => setMobileMenuOpen(false)}

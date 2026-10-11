@@ -1,5 +1,5 @@
 import React from 'react';
-import { Download, Sparkles, Play, Shield, Globe, Cpu, ArrowRight, Layers } from 'lucide-react';
+import { Download, Sparkles, Shield, Globe, Cpu, ArrowRight, Layers } from 'lucide-react';
 
 export const Hero: React.FC = () => {
   return (
@@ -49,11 +49,11 @@ export const Hero: React.FC = () => {
               </a>
 
               <a
-                href="#simulator"
+                href="#features"
                 className="w-full sm:w-auto px-6 py-4 rounded-2xl font-semibold text-slate-200 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all flex items-center justify-center space-x-2 group"
               >
-                <Play className="w-4 h-4 text-cyan-400 fill-cyan-400/30" />
-                <span>Try Live Simulator</span>
+                <Layers className="w-4 h-4 text-cyan-400" />
+                <span>Explore Features</span>
                 <ArrowRight className="w-4 h-4 text-slate-400 transition-transform group-hover:translate-x-1" />
               </a>
             </div>

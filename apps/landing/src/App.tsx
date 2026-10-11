@@ -1,7 +1,6 @@
 import React from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
-import { LiveSimulator } from './components/LiveSimulator';
 import { BentoGrid } from './components/BentoGrid';
 import { HowItWorks } from './components/HowItWorks';
 import { InstallGuide } from './components/InstallGuide';
@@ -15,7 +14,6 @@ export const App: React.FC = () => {
       <Navbar />
       <main className="flex-grow">
         <Hero />
-        <LiveSimulator />
         <BentoGrid />
         <HowItWorks />
         <InstallGuide />
