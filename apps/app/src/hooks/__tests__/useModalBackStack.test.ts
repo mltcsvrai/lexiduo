@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOMServer from 'react-dom/server';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { App as CapApp } from '@capacitor/app';
-import { useAppStore } from '@ytceviri/core';
+import { useAppStore } from '@lexiduo/core';
 import { useModalBackStack, handleModalBackPress } from '../useModalBackStack';
 
 vi.mock('@capacitor/app', () => ({

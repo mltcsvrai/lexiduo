@@ -1,5 +1,5 @@
-import type { SubtitleCue } from '@ytceviri/core';
-import { cacheTranscript, useAppStore, withBackgroundTask } from '@ytceviri/core';
+import type { SubtitleCue } from '@lexiduo/core';
+import { cacheTranscript, useAppStore, withBackgroundTask } from '@lexiduo/core';
 import { downloadAndExtractYouTubeAudio } from './youtubeAudioService';
 import { transcribeAudioBuffer, type WhisperProgress } from './whisperEngine';
 

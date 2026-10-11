@@ -1,4 +1,4 @@
-import type { SubtitleCue } from '@ytceviri/core';
+import type { SubtitleCue } from '@lexiduo/core';
 
 /**
  * Yields control back to the event loop so that the UI can paint,

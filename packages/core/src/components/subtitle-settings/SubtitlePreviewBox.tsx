@@ -68,7 +68,7 @@ export const SubtitlePreviewBox: React.FC<SubtitlePreviewBoxProps> = ({
                 fontSize: `${Math.min(fontSize, 20)}px`,
               }}
             >
-              YouTube Video Subtitle Translation
+              Lexiduo Subtitle Translation
             </div>
           )}
           {(subtitleMode === 'TARGET' || subtitleMode === 'DUAL') && (
@@ -80,7 +80,7 @@ export const SubtitlePreviewBox: React.FC<SubtitlePreviewBoxProps> = ({
                 fontSize: `${Math.max(12, Math.min(fontSize - (subtitleMode === 'DUAL' ? 3 : 0), 18))}px`,
               }}
             >
-              YouTube Video Altyazı Çevirisi
+              Lexiduo Video Altyazı Çevirisi
             </div>
           )}
         </div>

@@ -14,7 +14,6 @@ import {
   Download,
   ChevronRight
 } from 'lucide-react';
-import { get, set } from 'idb-keyval';
 import { Clipboard } from '@capacitor/clipboard';
 import { 
   useTranslation, 
@@ -24,8 +23,11 @@ import {
   type TranslationKey,
   type SelectOption,
   SUPPORTED_LANGUAGES,
-  HistoryLimitPicker
-} from '@ytceviri/core';
+  HistoryLimitPicker,
+  STORAGE_KEYS,
+  getCompatItem,
+  setCompatItem
+} from '@lexiduo/core';
 import { 
   getActiveWhisperTier, 
   getWhisperTierStatus, 
@@ -96,6 +98,7 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
   const [localHistory, setLocalHistory] = useState<LocalHistoryItem[]>([]);
   const [historyLayout, setHistoryLayout] = useState<'grid' | 'list'>('grid');
   const [isWhisperModalOpen, setIsWhisperModalOpen] = useState(false);
+  const isWhisperUiEnabled = false;
   const [activeModel, setActiveModel] = useState<{
     id: string;
     name: string;
@@ -146,9 +149,9 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
     async function loadData() {
       try {
         const [data, savedLayout, savedLocal] = await Promise.all([
-          get<HistoryItem[]>('yt_ceviri_history_list'),
-          get<'grid' | 'list'>('yt_ceviri_history_layout'),
-          get<LocalHistoryItem[]>('yt_ceviri_local_history')
+          getCompatItem<HistoryItem[]>(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy),
+          getCompatItem<'grid' | 'list'>(STORAGE_KEYS.HISTORY_LAYOUT.primary, STORAGE_KEYS.HISTORY_LAYOUT.legacy),
+          getCompatItem<LocalHistoryItem[]>(STORAGE_KEYS.LOCAL_HISTORY.primary, STORAGE_KEYS.LOCAL_HISTORY.legacy)
         ]);
 
         if (savedLayout === 'grid' || savedLayout === 'list') {
@@ -164,7 +167,7 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
           enrichHistoryItems(data).then(({ enrichedItems, hasChanges }) => {
             if (hasChanges) {
               setHistory(enrichedItems);
-              set('yt_ceviri_history_list', enrichedItems).catch(() => {});
+              setCompatItem(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy, enrichedItems).catch(() => {});
             }
           });
         }
@@ -177,21 +180,21 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
 
   const handleToggleLayout = async (mode: 'grid' | 'list') => {
     setHistoryLayout(mode);
-    await set('yt_ceviri_history_layout', mode).catch(() => {});
+    await setCompatItem(STORAGE_KEYS.HISTORY_LAYOUT.primary, STORAGE_KEYS.HISTORY_LAYOUT.legacy, mode).catch(() => {});
   };
 
   const handleDeleteYtItem = async (e: React.MouseEvent, videoId: string) => {
     e.stopPropagation();
     const updated = history.filter(item => item.videoId !== videoId);
     setHistory(updated);
-    await set('yt_ceviri_history_list', updated).catch(() => {});
+    await setCompatItem(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy, updated).catch(() => {});
   };
 
   const handleClearYtHistory = async () => {
     const confirmMsg = t('clearHistoryConfirm');
     if (confirm(confirmMsg)) {
       setHistory([]);
-      await set('yt_ceviri_history_list', []).catch(() => {});
+      await setCompatItem(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy, []).catch(() => {});
     }
   };
 
@@ -199,14 +202,14 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
     e.stopPropagation();
     const updated = localHistory.filter(item => item.id !== id);
     setLocalHistory(updated);
-    await set('yt_ceviri_local_history', updated).catch(() => {});
+    await setCompatItem(STORAGE_KEYS.LOCAL_HISTORY.primary, STORAGE_KEYS.LOCAL_HISTORY.legacy, updated).catch(() => {});
   };
 
   const handleClearLocalHistory = async () => {
     const confirmMsg = t('clearLocalHistoryConfirm');
     if (confirm(confirmMsg)) {
       setLocalHistory([]);
-      await set('yt_ceviri_local_history', []).catch(() => {});
+      await setCompatItem(STORAGE_KEYS.LOCAL_HISTORY.primary, STORAGE_KEYS.LOCAL_HISTORY.legacy, []).catch(() => {});
     }
   };
 
@@ -294,8 +297,8 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
 
       {/* Hero Badge */}
       <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold">
-        <Sparkles className="w-3.5 h-3.5" />
-        <span>YT Translator Studio • {activeModel.name} {activeModel.isDownloaded ? t('activeReadyBadge') : t('downloadableBadge')}</span>
+        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+        <span>Lexiduo Studio • Google Gemini AI</span>
       </div>
 
       {/* Headline */}
@@ -347,34 +350,36 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
         </button>
       </div>
 
-      {/* Dynamic Whisper AI Management Capsule Button */}
-      <button
-        type="button"
-        onClick={() => setIsWhisperModalOpen(true)}
-        className="inline-flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-indigo-500/50 text-xs text-slate-300 hover:text-white transition-all shadow-xl backdrop-blur-xl group cursor-pointer active:scale-95"
-      >
-        <div className="flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-indigo-400 group-hover:rotate-12 transition-transform" />
-          <span className="font-bold text-white tracking-wide">Whisper AI:</span>
-        </div>
+      {/* Dynamic Whisper AI Management Capsule Button (Temporarily hidden from UI) */}
+      {isWhisperUiEnabled && (
+        <button
+          type="button"
+          onClick={() => setIsWhisperModalOpen(true)}
+          className="inline-flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-white/10 hover:border-indigo-500/50 text-xs text-slate-300 hover:text-white transition-all shadow-xl backdrop-blur-xl group cursor-pointer active:scale-95"
+        >
+          <div className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400 group-hover:rotate-12 transition-transform" />
+            <span className="font-bold text-white tracking-wide">Whisper AI:</span>
+          </div>
 
-        {activeModel.isDownloaded ? (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-            <CheckCircle2 className="w-3 h-3" />
-            <span>{activeModel.name} ({activeModel.sizeMB} MB • {t('readyBadge')})</span>
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-            <Download className="w-3 h-3" />
-            <span>{t('noModelDownloaded')} (~{activeModel.sizeMB} MB)</span>
-          </span>
-        )}
+          {activeModel.isDownloaded ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>{activeModel.name} ({activeModel.sizeMB} MB • {t('readyBadge')})</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+              <Download className="w-3 h-3" />
+              <span>{t('noModelDownloaded')} (~{activeModel.sizeMB} MB)</span>
+            </span>
+          )}
 
-        <span className="text-[11px] text-slate-400 group-hover:text-slate-200 flex items-center gap-0.5 ml-0.5 font-medium">
-          <span>{t('manageModels')}</span>
-          <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:translate-x-0.5 transition-transform" />
-        </span>
-      </button>
+          <span className="text-[11px] text-slate-400 group-hover:text-slate-200 flex items-center gap-0.5 ml-0.5 font-medium">
+            <span>{t('manageModels')}</span>
+            <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:translate-x-0.5 transition-transform" />
+          </span>
+        </button>
+      )}
 
       {/* TAB 1: YOUTUBE SECTION */}
       {activeTab === 'youtube' && (
@@ -574,11 +579,13 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
         />
       )}
 
-      {/* Dedicated Whisper AI Models Management Modal */}
-      <WhisperModelsModal
-        isOpen={isWhisperModalOpen}
-        onClose={() => setIsWhisperModalOpen(false)}
-      />
+      {/* Dedicated Whisper AI Models Management Modal (Temporarily hidden from UI) */}
+      {isWhisperUiEnabled && (
+        <WhisperModelsModal
+          isOpen={isWhisperModalOpen}
+          onClose={() => setIsWhisperModalOpen(false)}
+        />
+      )}
     </div>
   );
 };

@@ -574,8 +574,8 @@ export async function muxSubtitlesIntoMkv(videoBlob: Blob, tracks: SubtitleTrack
     // Segment Info (0x1549A966)
     const segmentInfo = ebmlElement([0x15, 0x49, 0xA9, 0x66], concatBuffers([
       ebmlUint([0x2A, 0xD7, 0xB1], 1000000), // TimecodeScale = 1ms
-      ebmlString([0x4D, 0x80], 'YT Translator'),
-      ebmlString([0x57, 0x41], 'YT Translator'),
+      ebmlString([0x4D, 0x80], 'Lexiduo'),
+      ebmlString([0x57, 0x41], 'Lexiduo'),
       ebmlFloat64([0x44, 0x89], effectiveDurationMs)
     ]));
 

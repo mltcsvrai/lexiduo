@@ -1,6 +1,6 @@
 {
-  "appId": "com.ytceviri.app",
-  "appName": "YT Translator",
+  "appId": "com.lexiduo.app",
+  "appName": "Lexiduo",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
@@ -15,7 +15,7 @@
     "SplashScreen": {
       "launchShowDuration": 2000,
       "launchAutoHide": true,
-      "backgroundColor": "#0f172a",
+      "backgroundColor": "#0B0F19",
       "androidSplashResourceName": "splash",
       "androidScaleType": "CENTER_CROP",
       "showSpinner": false

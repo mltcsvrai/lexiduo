@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/logo.png" alt="YT Translator Logo" width="110" />
+  <img src="assets/logo.png" alt="Lexiduo Logo" width="110" />
 </p>
 
-<h1 align="center">YT Translator</h1>
+<h1 align="center">Lexiduo</h1>
 
 <p align="center">
   <strong>Context-aware, AI-powered dual subtitle translator and language learning ecosystem for Android and Web.</strong><br>
@@ -10,17 +10,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mltcsvrai/yt-translate-android/releases/latest"><img src="https://img.shields.io/github/v/release/mltcsvrai/yt-translate-android?color=blue&label=Release" alt="Latest Release"></a>
-  <a href="https://github.com/mltcsvrai/yt-translate-android/releases"><img src="https://img.shields.io/github/downloads/mltcsvrai/yt-translate-android/total?color=blueviolet&label=Downloads" alt="Total Downloads"></a>
-  <a href="https://github.com/mltcsvrai/yt-translate-android/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
+  <a href="https://github.com/mltcsvrai/lexiduo/releases/latest"><img src="https://img.shields.io/github/v/release/mltcsvrai/lexiduo?color=blue&label=Release" alt="Latest Release"></a>
+  <a href="https://github.com/mltcsvrai/lexiduo/releases"><img src="https://img.shields.io/github/downloads/mltcsvrai/lexiduo/total?color=blueviolet&label=Downloads" alt="Total Downloads"></a>
+  <a href="https://github.com/mltcsvrai/lexiduo/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License: GPL v3"></a>
   <a href="https://capacitorjs.com"><img src="https://img.shields.io/badge/Capacitor-8-119EFF.svg?logo=capacitor&logoColor=white" alt="Capacitor"></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=white" alt="React 19"></a>
   <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind-4-38B2AC.svg?logo=tailwind-css&logoColor=white" alt="Tailwind 4"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/mltcsvrai/yt-translate-android/releases/latest">
-    <img src="https://img.shields.io/badge/Download-YT%20Translator%20APK%20(Release)-success?style=for-the-badge&logo=android" alt="Download Release APK" />
+  <a href="https://github.com/mltcsvrai/lexiduo/releases/latest">
+    <img src="https://img.shields.io/badge/Download-Lexiduo%20APK%20(Release)-success?style=for-the-badge&logo=android" alt="Download Release APK" />
   </a>
 </p>
 
@@ -71,8 +71,8 @@ ytceviri/
 
 ```bash
 # Clone the repository
-git clone https://github.com/mltcsvrai/yt-translate-android.git
-cd yt-translate-android
+git clone https://github.com/mltcsvrai/lexiduo.git
+cd lexiduo
 
 # Install workspace dependencies & apply patches
 npm install
@@ -97,4 +97,4 @@ cd apps/app/android && ./gradlew assembleRelease
 
 ## 📄 License
 
-This project is licensed under the [MIT License](LICENSE).
+This project is licensed under the [GNU General Public License v3.0](LICENSE).

@@ -5,9 +5,10 @@ import {
   fetchVideoSubtitles, 
   checkFloatingPermissions, 
   startFloatingOverlay, 
+  loadFloatingCues,
   useTranslation, 
   type SubtitleCue 
-} from '@ytceviri/core';
+} from '@lexiduo/core';
 
 export interface PendingYouTubeVideo {
   videoId: string;
@@ -24,6 +25,7 @@ export interface UseYouTubePlaybackFlowParams {
   onExecuteInApp: (videoId: string, title?: string) => void;
   onOpenPermissionGuide: () => void;
   onSubtitlesLoaded?: (cues: SubtitleCue[]) => void;
+  initialPendingVideo?: PendingYouTubeVideo | null;
 }
 
 export function useYouTubePlaybackFlow({
@@ -35,10 +37,11 @@ export function useYouTubePlaybackFlow({
   onExecuteInApp,
   onOpenPermissionGuide,
   onSubtitlesLoaded,
+  initialPendingVideo = null,
 }: UseYouTubePlaybackFlowParams) {
   const { t } = useTranslation();
-  const [pendingVideo, setPendingVideo] = useState<PendingYouTubeVideo | null>(null);
-  const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(false);
+  const [pendingVideo, setPendingVideo] = useState<PendingYouTubeVideo | null>(initialPendingVideo);
+  const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(Boolean(initialPendingVideo));
   const [isPreparingSubtitles, setIsPreparingSubtitles] = useState(false);
 
   // Trigger modal when a YouTube video is loaded from any channel
@@ -79,37 +82,63 @@ export function useYouTubePlaybackFlow({
       targetCues = cues;
     }
 
+    let isBgFetching = false;
     try {
       setIsPreparingSubtitles(true);
 
-      // If subtitles are not in memory, fetch them now
-      if (targetCues.length === 0) {
-        const result = await fetchVideoSubtitles(targetVideoId, sourceLang, targetLang, apiKey);
-        if (result && result.cues && result.cues.length > 0) {
-          targetCues = result.cues;
-          onSubtitlesLoaded?.(targetCues);
-        }
-      }
-
-      // Check overlay permissions
+      // Check overlay permissions immediately
       const perms = await checkFloatingPermissions();
       if (!perms.overlay) {
         setIsChoiceModalOpen(false);
         setPendingVideo(null);
         onOpenPermissionGuide();
-      } else {
-        await startFloatingOverlay(targetCues, targetVideoId);
-        setIsChoiceModalOpen(false);
-        setPendingVideo(null);
+        return;
+      }
+
+      // Close modal immediately so UI is not blocked
+      setIsChoiceModalOpen(false);
+      setPendingVideo(null);
+
+      // Launch YouTube app and floating overlay immediately (within milliseconds)
+      await startFloatingOverlay(targetCues.length > 0 ? targetCues : undefined, targetVideoId);
+
+      // If subtitles are not in memory, stream and fetch them in background without blocking
+      if (targetCues.length === 0) {
+        isBgFetching = true;
+        fetchVideoSubtitles(
+          targetVideoId,
+          sourceLang,
+          targetLang,
+          apiKey,
+          async (fastCues) => {
+            if (fastCues && fastCues.length > 0) {
+              await loadFloatingCues(fastCues);
+            }
+          }
+        )
+          .then(async (result) => {
+            if (result?.cues && result.cues.length > 0) {
+              await loadFloatingCues(result.cues);
+              onSubtitlesLoaded?.(result.cues);
+            }
+          })
+          .catch((err) => {
+            console.error('Failed to fetch subtitles in background for floating overlay:', err);
+          })
+          .finally(() => {
+            setIsPreparingSubtitles(false);
+          });
       }
     } catch (err) {
       console.error('Failed to launch YouTube with floating overlay:', err);
-      // Fallback: If permissions fail, show guide
+      // Fallback: If permissions fail or launch errors, show guide
       setIsChoiceModalOpen(false);
       setPendingVideo(null);
       onOpenPermissionGuide();
     } finally {
-      setIsPreparingSubtitles(false);
+      if (!isBgFetching) {
+        setIsPreparingSubtitles(false);
+      }
     }
   }, [
     pendingVideo, 

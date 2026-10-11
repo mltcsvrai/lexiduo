@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOMServer from 'react-dom/server';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import * as core from '@ytceviri/core';
+import * as core from '@lexiduo/core';
 import { useAutoYouTubeAssistant, processDetectedVideo, IDB_KEY_AUTO_ASSISTANT } from '../useAutoYouTubeAssistant';
 
 describe('useAutoYouTubeAssistant hook & processDetectedVideo', () => {
@@ -176,5 +176,34 @@ describe('useAutoYouTubeAssistant hook & processDetectedVideo', () => {
     expect(clearSpy).toHaveBeenCalled();
     expect(aiFallbackSpy).toHaveBeenCalledWith(true);
     expect(lastProcRef.current).toBe('Mysterious Video Without ID::');
+  });
+
+  it('calls clearFloatingCues immediately when a new video is detected before fetching subtitles', async () => {
+    const activeReqRef = { current: 0 };
+    const lastProcRef = { current: '' };
+
+    let clearedBeforeFetch = false;
+    const clearSpy = vi.spyOn(core, 'clearFloatingCues').mockImplementation(async () => {
+      clearedBeforeFetch = true;
+      return true;
+    });
+
+    vi.spyOn(core, 'fetchVideoSubtitles').mockImplementation(async () => {
+      expect(clearedBeforeFetch).toBe(true);
+      return {
+        cues: [{ id: '1', start: 0, end: 5, targetText: 'Yeni', sourceText: 'New' }],
+        isAiTranslated: false
+      };
+    });
+    vi.spyOn(core, 'loadFloatingCues').mockResolvedValue(1);
+
+    const result = await processDetectedVideo(
+      { title: 'Fresh Video', videoId: 'fresh123' },
+      activeReqRef,
+      lastProcRef
+    );
+
+    expect(result).toBe(true);
+    expect(clearSpy).toHaveBeenCalled();
   });
 });

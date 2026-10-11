@@ -1,6 +1,6 @@
 import React from 'react';
 import { X, Sparkles, ShieldCheck, Zap } from 'lucide-react';
-import { useTranslation } from '@ytceviri/core';
+import { useTranslation } from '@lexiduo/core';
 import { OfflineModelSection } from './OfflineModelSection';
 
 interface WhisperModelsModalProps {

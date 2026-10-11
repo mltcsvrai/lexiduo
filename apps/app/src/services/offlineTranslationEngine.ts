@@ -1,5 +1,5 @@
 import { get, set, del } from 'idb-keyval';
-import { translateTextSecure, withBackgroundTask } from '@ytceviri/core';
+import { translateTextSecure, withBackgroundTask } from '@lexiduo/core';
 import { 
   getCachedHardwareProfile, 
   getDeviceHardwareProfile, 
@@ -123,15 +123,22 @@ export function isTierSupportedOnCurrentDevice(
   return { supported: true };
 }
 
-export const ACTIVE_WHISPER_TIER_KEY = 'yt_studio_active_whisper_tier';
-export const WHISPER_TIER_CHANGED_EVENT = 'yt_studio_whisper_tier_changed';
-export const OFFLINE_MODEL_STORAGE_KEY = 'yt_studio_offline_whisper_v1';
+export const ACTIVE_WHISPER_TIER_KEY = 'lexiduo_active_whisper_tier';
+export const LEGACY_ACTIVE_WHISPER_TIER_KEY = 'yt_studio_active_whisper_tier';
+export const WHISPER_TIER_CHANGED_EVENT = 'lexiduo_whisper_tier_changed';
+export const LEGACY_WHISPER_TIER_CHANGED_EVENT = 'yt_studio_whisper_tier_changed';
+export const OFFLINE_MODEL_STORAGE_KEY = 'lexiduo_offline_whisper_v1';
+export const LEGACY_OFFLINE_MODEL_STORAGE_KEY = 'yt_studio_offline_whisper_v1';
 export const OFFLINE_WHISPER_MODEL_ID = 'onnx-community/whisper-tiny';
 export const OFFLINE_MODEL_ESTIMATED_SIZE_MB = 39;
 export const DEFAULT_WHISPER_TIER: WhisperTierKey = 'tiny';
 
 export function getTierStorageKey(tierId: string): string {
   return `yt_studio_offline_whisper_${tierId}`;
+}
+
+export function getLexiduoTierStorageKey(tierId: string): string {
+  return `lexiduo_offline_whisper_${tierId}`;
 }
 
 export interface OfflineModelStatus {
@@ -150,12 +157,13 @@ const cachedWhisperPipelines = new Map<string, any>();
  */
 export async function getActiveWhisperTier(): Promise<string> {
   try {
-    const saved = await get<string>(ACTIVE_WHISPER_TIER_KEY);
+    const saved = (await get<string>(ACTIVE_WHISPER_TIER_KEY)) || (await get<string>(LEGACY_ACTIVE_WHISPER_TIER_KEY));
     if (saved && (saved in WHISPER_TIERS)) {
       return saved;
     }
     // Backward compatibility: If legacy tiny was downloaded
-    const legacy = await get<{ timestamp: number; sizeBytes: number }>(OFFLINE_MODEL_STORAGE_KEY);
+    const legacy = (await get<{ timestamp: number; sizeBytes: number }>(OFFLINE_MODEL_STORAGE_KEY)) ||
+                   (await get<{ timestamp: number; sizeBytes: number }>(LEGACY_OFFLINE_MODEL_STORAGE_KEY));
     if (legacy && legacy.sizeBytes > 0) {
       return 'tiny';
     }
@@ -174,8 +182,10 @@ export async function setActiveWhisperTier(tierId: string): Promise<void> {
     return;
   }
   await set(ACTIVE_WHISPER_TIER_KEY, tierId);
+  await set(LEGACY_ACTIVE_WHISPER_TIER_KEY, tierId);
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent(WHISPER_TIER_CHANGED_EVENT, { detail: { tierId } }));
+    window.dispatchEvent(new CustomEvent(LEGACY_WHISPER_TIER_CHANGED_EVENT, { detail: { tierId } }));
   }
 }
 
@@ -202,9 +212,13 @@ export async function getWhisperTierStatus(tierId: string): Promise<OfflineModel
       }
     }
 
-    let record = await get<{ timestamp: number; sizeBytes: number; modelId?: string }>(storageKey);
+    let record = await get<{ timestamp: number; sizeBytes: number; modelId?: string }>(getLexiduoTierStorageKey(tierId));
+    if (!record || !record.sizeBytes) {
+      record = await get<{ timestamp: number; sizeBytes: number; modelId?: string }>(storageKey);
+    }
     if ((!record || !record.sizeBytes) && tierId === 'tiny') {
-      record = await get<{ timestamp: number; sizeBytes: number; modelId?: string }>(OFFLINE_MODEL_STORAGE_KEY);
+      record = (await get<{ timestamp: number; sizeBytes: number; modelId?: string }>(OFFLINE_MODEL_STORAGE_KEY)) ||
+               (await get<{ timestamp: number; sizeBytes: number; modelId?: string }>(LEGACY_OFFLINE_MODEL_STORAGE_KEY));
     }
     const activeTier = await getActiveWhisperTier();
     const isActive = activeTier === tierId;
@@ -398,8 +412,10 @@ export async function downloadWhisperTier(
         tierId
       };
       await set(storageKey, meta);
+      await set(getLexiduoTierStorageKey(tierId), meta);
       if (tierId === 'tiny') {
         await set(OFFLINE_MODEL_STORAGE_KEY, meta);
+        await set(LEGACY_OFFLINE_MODEL_STORAGE_KEY, meta);
       }
 
       await setActiveWhisperTier(tierId);
@@ -427,8 +443,10 @@ export async function deleteWhisperTier(tierId: string): Promise<void> {
 
   const storageKey = getTierStorageKey(tierId);
   await del(storageKey);
+  await del(getLexiduoTierStorageKey(tierId));
   if (tierId === 'tiny') {
     await del(OFFLINE_MODEL_STORAGE_KEY);
+    await del(LEGACY_OFFLINE_MODEL_STORAGE_KEY);
   }
   cachedWhisperPipelines.delete(tierId);
 

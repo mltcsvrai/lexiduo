@@ -3,9 +3,6 @@ import {
   Languages, 
   Upload, 
   ShieldCheck, 
-  Cpu, 
-  HardDrive, 
-  ChevronRight, 
   Sparkles, 
   Clock, 
   Trash2, 
@@ -16,7 +13,7 @@ import {
   CustomSelect, 
   type SelectOption, 
   HistoryLimitPicker 
-} from '@ytceviri/core';
+} from '@lexiduo/core';
 import { WhisperProcessingCard } from './WhisperProcessingCard';
 import type { WhisperProgress } from '../services/whisperEngine';
 
@@ -58,13 +55,13 @@ export const StudioLocalSection: React.FC<StudioLocalSectionProps> = ({
   whisperProgress,
   statusText,
   progressPercent,
-  activeModel,
+  activeModel: _activeModel,
   sourceLang,
   setSourceLang,
   languageOptions,
   handleChooseVideo,
   handleDrop,
-  setIsWhisperModalOpen,
+  setIsWhisperModalOpen: _setIsWhisperModalOpen,
   localHistory,
   historyLimit,
   handleDeleteLocalItem,
@@ -106,7 +103,7 @@ export const StudioLocalSection: React.FC<StudioLocalSectionProps> = ({
         {isProcessingLocal ? (
           <WhisperProcessingCard
             progress={whisperProgress}
-            tierName={activeModel.name}
+            tierName="Google Gemini AI"
             fallbackText={statusText}
             fallbackPercent={progressPercent}
           />
@@ -135,8 +132,8 @@ export const StudioLocalSection: React.FC<StudioLocalSectionProps> = ({
         )}
       </div>
 
-      {/* Privacy & Offline Badges */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-left">
+      {/* Privacy & Engine Badges */}
+      <div className="grid grid-cols-2 gap-3 text-left">
         <div className="p-3 rounded-2xl bg-slate-900/60 border border-white/5 flex items-center gap-2.5">
           <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
           <div>
@@ -145,59 +142,12 @@ export const StudioLocalSection: React.FC<StudioLocalSectionProps> = ({
           </div>
         </div>
         <div className="p-3 rounded-2xl bg-slate-900/60 border border-white/5 flex items-center gap-2.5">
-          <Cpu className="w-4 h-4 text-indigo-400 shrink-0" />
+          <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
           <div>
-            <p className="text-xs font-semibold text-white">Whisper AI STT</p>
-            <p className="text-[10px] text-slate-400">{t('onDeviceTranscription')}</p>
+            <p className="text-xs font-semibold text-white">Google Gemini AI</p>
+            <p className="text-[10px] text-slate-400">{t('zeroDownloadBadge')}</p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setIsWhisperModalOpen(true)}
-          className={`p-3 rounded-2xl border flex items-center justify-between col-span-2 sm:col-span-1 transition-all text-left group cursor-pointer ${
-            activeModel.isDownloaded 
-              ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300 hover:border-emerald-400/60' 
-              : 'bg-slate-900/60 border-white/5 hover:border-indigo-500/40'
-          }`}
-          title={t('manageModels')}
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <HardDrive className={`w-4 h-4 shrink-0 ${activeModel.isDownloaded ? 'text-emerald-400' : 'text-cyan-400'}`} />
-            <div className="min-w-0">
-              <p className="text-xs font-semibold text-white truncate">
-                {activeModel.isDownloaded ? `${activeModel.name} ${t('modelActive')}` : activeModel.name}
-              </p>
-              <p className={`text-[10px] ${activeModel.isDownloaded ? 'text-emerald-400 font-medium' : 'text-slate-400'}`}>
-                {activeModel.isDownloaded 
-                  ? `${activeModel.sizeMB} MB • ${t('readyBadge')}` 
-                  : `${activeModel.sizeMB} MB • ${t('downloadableBadge')}`}
-              </p>
-            </div>
-          </div>
-          <ChevronRight className="w-3.5 h-3.5 text-slate-500 group-hover:text-white group-hover:translate-x-0.5 transition-transform shrink-0" />
-        </button>
-      </div>
-
-      {/* Quick Whisper Model Management Banner */}
-      <div className="p-3 sm:p-3.5 rounded-2xl bg-indigo-950/20 border border-indigo-500/20 flex items-center justify-between gap-3 text-left">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-white">
-              {t('manageModels')}
-            </p>
-            <p className="text-[11px] text-slate-400 truncate">
-              {t('whisperUniversalNotice')}
-            </p>
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setIsWhisperModalOpen(true)}
-          className="px-3 py-1.5 rounded-xl bg-indigo-600/80 hover:bg-indigo-600 text-white font-medium text-xs transition-colors shrink-0 cursor-pointer shadow-md"
-        >
-          {activeModel.isDownloaded ? t('manageModels') : t('downloadOrManage')}
-        </button>
       </div>
 
       {/* Recent Local Videos History */}

@@ -1,9 +1,8 @@
 import { smartFetch } from './translationService';
 
 export const GEMINI_MODEL_HIERARCHY = [
-  'gemini-3.8-flash',
-  'gemini-3.7-flash',
-  'gemini-3.5-flash-lite'
+  'gemini-3.5-flash-lite',
+  'gemma-4-31b-it'
 ] as const;
 
 export type ApiKeyStatus = 'idle' | 'testing' | 'valid' | 'invalid' | 'rate_limited' | 'network_error';

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { testGeminiApiKey } from '../geminiService';
+import { testGeminiApiKey, GEMINI_MODEL_HIERARCHY } from '../geminiService';
 import * as translationService from '../translationService';
 
 describe('testGeminiApiKey', () => {
@@ -79,3 +79,13 @@ describe('testGeminiApiKey', () => {
     expect(result.message).toContain('timeout');
   });
 });
+
+describe('GEMINI_MODEL_HIERARCHY', () => {
+  it('should define GEMINI_MODEL_HIERARCHY with gemini-3.5-flash-lite primary and gemma-4-31b-it fallback', () => {
+    expect(GEMINI_MODEL_HIERARCHY).toEqual([
+      'gemini-3.5-flash-lite',
+      'gemma-4-31b-it'
+    ]);
+  });
+});
+

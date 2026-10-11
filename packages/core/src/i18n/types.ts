@@ -378,7 +378,8 @@ export type TranslationKey =
   | 'downloadSubtitlesFallbackBtn'
   | 'downloadSubtitlesVttBtn'
   | 'videoStreamUnavailableDesc'
-  | 'downloadSubtitlesOnlyBtn';
+  | 'downloadSubtitlesOnlyBtn'
+  | 'heavyModelGuidanceNotice';
 
 export type Translations = Record<TranslationKey, string>;
 

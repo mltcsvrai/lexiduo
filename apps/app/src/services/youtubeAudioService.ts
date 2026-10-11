@@ -1,4 +1,4 @@
-import { smartFetch } from '@ytceviri/core';
+import { smartFetch } from '@lexiduo/core';
 import { extractAudioFromVideo, type AudioExtractionProgress } from './audioExtractor';
 
 export interface AudioDownloadProgress {

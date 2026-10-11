@@ -1,8 +1,11 @@
 import { Preferences } from '@capacitor/preferences';
 import { get, set } from 'idb-keyval';
 
-export const PRIMARY_KEY_NAME = 'yt_ceviri_gemini_key';
-export const LEGACY_KEY_NAME = 'gemini_api_key';
+export const PRIMARY_KEY_NAME = 'lexiduo_gemini_key';
+export const LEGACY_KEY_NAME = 'yt_ceviri_gemini_key';
+export const OLDEST_KEY_NAME = 'gemini_api_key';
+
+const ALL_STORAGE_KEYS = [PRIMARY_KEY_NAME, LEGACY_KEY_NAME, OLDEST_KEY_NAME];
 
 /**
  * Persists Gemini API key across all three storage layers:
@@ -15,8 +18,9 @@ export async function persistApiKey(rawKey: string): Promise<void> {
 
   // 1. Native SharedPreferences via @capacitor/preferences
   try {
-    await Preferences.set({ key: PRIMARY_KEY_NAME, value: cleanKey });
-    await Preferences.set({ key: LEGACY_KEY_NAME, value: cleanKey });
+    for (const k of ALL_STORAGE_KEYS) {
+      await Preferences.set({ key: k, value: cleanKey });
+    }
   } catch (err) {
     console.warn('[apiKeyStorage] Preferences.set warning:', err);
   }
@@ -25,11 +29,13 @@ export async function persistApiKey(rawKey: string): Promise<void> {
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
       if (cleanKey) {
-        localStorage.setItem(PRIMARY_KEY_NAME, cleanKey);
-        localStorage.setItem(LEGACY_KEY_NAME, cleanKey);
+        for (const k of ALL_STORAGE_KEYS) {
+          localStorage.setItem(k, cleanKey);
+        }
       } else {
-        localStorage.removeItem(PRIMARY_KEY_NAME);
-        localStorage.removeItem(LEGACY_KEY_NAME);
+        for (const k of ALL_STORAGE_KEYS) {
+          localStorage.removeItem(k);
+        }
       }
     } catch (err) {
       console.warn('[apiKeyStorage] localStorage.setItem warning:', err);
@@ -38,8 +44,9 @@ export async function persistApiKey(rawKey: string): Promise<void> {
 
   // 3. IndexedDB
   try {
-    await set(PRIMARY_KEY_NAME, cleanKey);
-    await set(LEGACY_KEY_NAME, cleanKey);
+    for (const k of ALL_STORAGE_KEYS) {
+      await set(k, cleanKey);
+    }
   } catch (err) {
     console.warn('[apiKeyStorage] idb-keyval set warning:', err);
   }
@@ -55,13 +62,11 @@ export async function retrieveApiKey(): Promise<string> {
 
   // 1. Try Native SharedPreferences (highest durability, survives APK updates)
   try {
-    const prefResult = await Preferences.get({ key: PRIMARY_KEY_NAME });
-    if (prefResult?.value && prefResult.value.trim().length > 0) {
-      resolvedKey = prefResult.value.trim();
-    } else {
-      const legacyPref = await Preferences.get({ key: LEGACY_KEY_NAME });
-      if (legacyPref?.value && legacyPref.value.trim().length > 0) {
-        resolvedKey = legacyPref.value.trim();
+    for (const k of ALL_STORAGE_KEYS) {
+      const prefResult = await Preferences.get({ key: k });
+      if (prefResult?.value && prefResult.value.trim().length > 0) {
+        resolvedKey = prefResult.value.trim();
+        break;
       }
     }
   } catch (err) {
@@ -71,9 +76,12 @@ export async function retrieveApiKey(): Promise<string> {
   // 2. Try localStorage if not found yet
   if (!resolvedKey && typeof window !== 'undefined' && window.localStorage) {
     try {
-      const localVal = localStorage.getItem(PRIMARY_KEY_NAME) || localStorage.getItem(LEGACY_KEY_NAME);
-      if (localVal && localVal.trim().length > 0) {
-        resolvedKey = localVal.trim();
+      for (const k of ALL_STORAGE_KEYS) {
+        const localVal = localStorage.getItem(k);
+        if (localVal && localVal.trim().length > 0) {
+          resolvedKey = localVal.trim();
+          break;
+        }
       }
     } catch (err) {
       console.warn('[apiKeyStorage] localStorage.getItem warning:', err);
@@ -83,11 +91,12 @@ export async function retrieveApiKey(): Promise<string> {
   // 3. Try IndexedDB if not found yet
   if (!resolvedKey) {
     try {
-      const idbVal1 = await get<string>(PRIMARY_KEY_NAME);
-      const idbVal2 = await get<string>(LEGACY_KEY_NAME);
-      const idbVal = (idbVal1 && idbVal1.trim()) || (idbVal2 && idbVal2.trim());
-      if (idbVal) {
-        resolvedKey = idbVal;
+      for (const k of ALL_STORAGE_KEYS) {
+        const idbVal = await get<string>(k);
+        if (idbVal && idbVal.trim().length > 0) {
+          resolvedKey = idbVal.trim();
+          break;
+        }
       }
     } catch (err) {
       console.warn('[apiKeyStorage] idb-keyval get warning:', err);

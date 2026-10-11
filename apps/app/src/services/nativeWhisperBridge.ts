@@ -1,5 +1,5 @@
 import { registerPlugin, Capacitor, type PluginListenerHandle } from '@capacitor/core';
-import type { SubtitleCue } from '@ytceviri/core';
+import type { SubtitleCue } from '@lexiduo/core';
 
 export type HardwareTierLevel = 1 | 2 | 3 | 4;
 export type HardwareTierName = 'flagship' | 'balanced' | 'low_memory' | 'cloud_recommended';

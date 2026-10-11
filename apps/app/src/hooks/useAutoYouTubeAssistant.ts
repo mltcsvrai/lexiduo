@@ -13,9 +13,10 @@ import {
   type FloatingPermissionsStatus,
   type AutoAssistantStatus,
   type AutoAssistantVideoDetectedData
-} from '@ytceviri/core';
+} from '@lexiduo/core';
 
 export const IDB_KEY_AUTO_ASSISTANT = 'yt_ceviri_auto_assistant_enabled';
+export const PRIMARY_IDB_KEY_AUTO_ASSISTANT = 'lexiduo_auto_assistant_enabled';
 
 export interface UseAutoYouTubeAssistantOptions {
   onOpenPermissionGuide?: () => void;
@@ -40,6 +41,10 @@ export async function processDetectedVideo(
   }
   lastProcessedVideoRef.current = videoKey;
   const currentReqId = ++activeRequestIdRef.current;
+
+  // Immediately clear previous video subtitles from floating overlay to prevent stale text
+  await clearFloatingCues();
+  if (currentReqId !== activeRequestIdRef.current) return false;
 
   const currentStore = useAppStore.getState();
   const sourceLang = options?.sourceLang;
@@ -119,12 +124,14 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
 
   const refreshStatus = useCallback(async () => {
     try {
-      const [savedEnabled, perms, status] = await Promise.all([
+      const [savedEnabledPrimary, savedEnabledLegacy, perms, status] = await Promise.all([
+        get<boolean>(PRIMARY_IDB_KEY_AUTO_ASSISTANT),
         get<boolean>(IDB_KEY_AUTO_ASSISTANT),
         checkFloatingPermissions(),
         FloatingSubtitle.getAutoAssistantStatus().catch(() => ({ active: false } as AutoAssistantStatus))
       ]);
 
+      const savedEnabled = savedEnabledPrimary !== undefined ? savedEnabledPrimary : savedEnabledLegacy;
       setPermissions(perms);
 
       const isActuallyActive = Boolean(status?.active || status?.enabled || status?.isOverlayRunning);
@@ -133,7 +140,10 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
         await FloatingSubtitle.startAutoAssistant({ sourceLang, targetLang }).catch(() => {});
         setIsActive(true);
       } else if (!perms.overlay && savedEnabled) {
-        await set(IDB_KEY_AUTO_ASSISTANT, false);
+        await Promise.all([
+          set(PRIMARY_IDB_KEY_AUTO_ASSISTANT, false),
+          set(IDB_KEY_AUTO_ASSISTANT, false)
+        ]);
         setIsActive(false);
       } else {
         setIsActive(isActuallyActive || shouldBeActive);
@@ -246,7 +256,10 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
 
       const res = await FloatingSubtitle.startAutoAssistant({ sourceLang, targetLang });
       if (res?.started || res?.enabled || res?.active) {
-        await set(IDB_KEY_AUTO_ASSISTANT, true);
+        await Promise.all([
+          set(PRIMARY_IDB_KEY_AUTO_ASSISTANT, true),
+          set(IDB_KEY_AUTO_ASSISTANT, true)
+        ]);
         setIsActive(true);
 
         // Pre-prime floating overlay with existing cues if store already has an active video
@@ -274,7 +287,10 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
     try {
       activeRequestIdRef.current++;
       const res = await FloatingSubtitle.stopAutoAssistant();
-      await set(IDB_KEY_AUTO_ASSISTANT, false);
+      await Promise.all([
+        set(PRIMARY_IDB_KEY_AUTO_ASSISTANT, false),
+        set(IDB_KEY_AUTO_ASSISTANT, false)
+      ]);
       setIsActive(false);
       lastProcessedVideoRef.current = '';
       return Boolean(res?.stopped || res?.enabled === false);

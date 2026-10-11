@@ -1,5 +1,5 @@
-import type { SubtitleCue, TranslationKey } from '@ytceviri/core';
-import { aggregateSentenceCues, distributeTargetTextToWindows, smartFetch, translateWithGeminiAI, GEMINI_MODEL_HIERARCHY, useAppStore, withBackgroundTask } from '@ytceviri/core';
+import type { SubtitleCue, TranslationKey } from '@lexiduo/core';
+import { aggregateSentenceCues, distributeTargetTextToWindows, smartFetch, translateWithGeminiAI, GEMINI_MODEL_HIERARCHY, useAppStore, withBackgroundTask } from '@lexiduo/core';
 import { 
   translateStudioText, 
   getLocalWhisperPipeline, 

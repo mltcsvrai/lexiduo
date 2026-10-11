@@ -586,7 +586,7 @@ export const DownloadSubtitlesModal: React.FC<DownloadSubtitlesModalProps> = ({
               <Cpu size={14} className="text-purple-400" />
               {t('translationEngine')}
             </label>
-            <div className={`grid ${downloadType === 'video' ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setEngine('google')}
@@ -613,20 +613,6 @@ export const DownloadSubtitlesModal: React.FC<DownloadSubtitlesModalProps> = ({
                 </span>
                 <span className="text-[10px] text-slate-300 font-normal">AI API</span>
               </button>
-              {downloadType === 'video' && (
-                <button
-                  type="button"
-                  onClick={() => setEngine('whisper')}
-                  className={`py-2 px-2.5 rounded-2xl border text-xs font-bold flex flex-col items-center justify-center gap-1 transition cursor-pointer ${
-                    engine === 'whisper'
-                      ? 'bg-red-600 text-white border-red-500 shadow-md'
-                      : 'bg-black/30 border-white/10 text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <span>Whisper</span>
-                  <span className="text-[10px] text-slate-300 font-normal">{t('onDeviceBadge')}</span>
-                </button>
-              )}
             </div>
             {engine === 'gemini' && (!apiKey || apiKey.trim().length < 8) && (
               <div className="p-2 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center gap-2 text-[11px] text-amber-300">

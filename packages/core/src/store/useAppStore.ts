@@ -141,7 +141,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   subtitleMode: 'DUAL',
   setSubtitleMode: (mode) => set({ subtitleMode: mode }),
   
-  fontSize: 25,
+  fontSize: 13,
   setFontSize: (size) => set({ fontSize: size }),
   
   activeWordTranslation: null,

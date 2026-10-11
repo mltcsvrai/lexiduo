@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Cpu, Cloud, Key, X, Sparkles, CheckCircle2, Download, ShieldCheck } from 'lucide-react';
-import { useTranslation } from '@ytceviri/core';
+import { useTranslation } from '@lexiduo/core';
 
 export interface YouTubeWhisperModalProps {
   isOpen: boolean;

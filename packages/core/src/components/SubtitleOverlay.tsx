@@ -209,8 +209,7 @@ export const SubtitleOverlay: React.FC = React.memo(() => {
     if (selection) {
       const text = selection.toString().trim();
       if (text.includes(' ')) {
-        const event = new CustomEvent('yt-ceviri-idiom-lookup', { detail: text });
-        window.dispatchEvent(event);
+        window.dispatchEvent(new CustomEvent('lexiduo-idiom-lookup', { detail: text }));
       }
     }
   };

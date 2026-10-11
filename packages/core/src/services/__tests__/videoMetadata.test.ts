@@ -8,7 +8,7 @@ import {
   HISTORY_LIMIT_OPTIONS
 } from '../videoMetadata';
 import * as transcriptService from '../transcriptService';
-import type { HistoryItem } from '@ytceviri/core';
+import type { HistoryItem } from '@lexiduo/core';
 
 
 describe('videoMetadata service', () => {

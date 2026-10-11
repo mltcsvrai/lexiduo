@@ -10,9 +10,9 @@ import {
   TopSearchOverlay, HistoryModal, fetchVideoSubtitles, extractYouTubeId, fetchYouTubeMetadata, 
   cacheVideoTitle, listenToSharedLinks, uriToFile, useTranslation, useAppStore, FloatingDock, 
   checkFloatingPermissions, startFloatingOverlay, withBackgroundTask, 
-  persistApiKey, retrieveApiKey,
+  persistApiKey, STORAGE_KEYS, getCompatItem, setCompatItem, loadAppPreferences,
   type YouTubePlayerHandle, type HistoryItem, type SubtitleCue 
-} from '@ytceviri/core';
+} from '@lexiduo/core';
 
 import { StudioHero } from './components/StudioHero';
 import { LocalVideoPlayer, type LocalVideoPlayerHandle } from './components/LocalVideoPlayer';
@@ -85,7 +85,7 @@ export function App() {
     setIsYtWhisperModalOpen(false);
     setActiveWordTranslation(null);
     if (clearPersisted) {
-      set('yt_ceviri_video_id', '').catch(() => {});
+      setCompatItem(STORAGE_KEYS.VIDEO_ID.primary, STORAGE_KEYS.VIDEO_ID.legacy, '').catch(() => {});
     }
   }, [videoUrl, setVideoId, setCues, setActiveWordTranslation]);
 
@@ -107,32 +107,27 @@ export function App() {
   useEffect(() => {
     async function initStorage() {
       try {
-        const [loadedKey, vid, sL, tL, bg, sync, lim, sCol, tCol, fFam, fW, bgW, bgC, bgOp, tOut] = await Promise.all([
-          retrieveApiKey(),
-          get<string>('yt_ceviri_video_id'),
-          get<string>('source_lang'), get<string>('target_lang'),
-          get<boolean>('yt_ceviri_subtitle_bg'), get<number>('yt_ceviri_sync_offset'), get<number>('yt_ceviri_history_limit'),
-          get<string>('yt_ceviri_source_color'), get<string>('yt_ceviri_target_color'),
-          get<string>('yt_ceviri_font_family'), get<string>('yt_ceviri_font_weight'),
-          get<string>('yt_ceviri_bg_width_mode'), get<string>('yt_ceviri_bg_color'),
-          get<number>('yt_ceviri_bg_opacity'), get<string>('yt_ceviri_text_outline')
-        ]);
-        if (loadedKey) setApiKey(loadedKey);
-        if (vid) setVideoId(vid);
-        if (sL) setSourceLang(sL);
-        if (tL) setTargetLang(tL);
+        const prefs = await loadAppPreferences();
+        if (prefs.apiKey) setApiKey(prefs.apiKey);
+        if (prefs.videoId) setVideoId(prefs.videoId);
+        if (prefs.sourceLang) setSourceLang(prefs.sourceLang);
+        if (prefs.targetLang) setTargetLang(prefs.targetLang);
         else setTargetLang('tr');
-        if (bg !== undefined) setShowSubtitleBg(bg);
-        if (sync !== undefined) setSyncOffset(sync);
-        if (typeof lim === 'number') useAppStore.getState().setHistoryLimit(lim);
-        if (sCol) useAppStore.getState().setSourceTextColor(sCol);
-        if (tCol) useAppStore.getState().setTargetTextColor(tCol);
-        if (fFam) useAppStore.getState().setFontFamily(fFam);
-        if (fW) useAppStore.getState().setFontWeight(fW);
-        if (bgW === 'dynamic' || bgW === 'fixed') useAppStore.getState().setBgWidthMode(bgW);
-        if (bgC) useAppStore.getState().setBgColor(bgC);
-        if (typeof bgOp === 'number') useAppStore.getState().setBgOpacity(bgOp);
-        if (tOut === 'none' || tOut === 'shadow' || tOut === 'stroke') useAppStore.getState().setTextOutline(tOut);
+        if (prefs.subtitleBg !== undefined) setShowSubtitleBg(prefs.subtitleBg);
+        if (prefs.syncOffset !== undefined) setSyncOffset(prefs.syncOffset);
+        if (typeof prefs.historyLimit === 'number') useAppStore.getState().setHistoryLimit(prefs.historyLimit);
+        if (prefs.sourceColor) useAppStore.getState().setSourceTextColor(prefs.sourceColor);
+        if (prefs.targetColor) useAppStore.getState().setTargetTextColor(prefs.targetColor);
+        if (prefs.fontFamily) useAppStore.getState().setFontFamily(prefs.fontFamily);
+        if (prefs.fontWeight) useAppStore.getState().setFontWeight(prefs.fontWeight);
+        if (prefs.bgWidthMode === 'dynamic' || prefs.bgWidthMode === 'fixed') {
+          useAppStore.getState().setBgWidthMode(prefs.bgWidthMode);
+        }
+        if (prefs.bgColor) useAppStore.getState().setBgColor(prefs.bgColor);
+        if (typeof prefs.bgOpacity === 'number') useAppStore.getState().setBgOpacity(prefs.bgOpacity);
+        if (prefs.textOutline === 'none' || prefs.textOutline === 'shadow' || prefs.textOutline === 'stroke') {
+          useAppStore.getState().setTextOutline(prefs.textOutline);
+        }
       } catch (e) { console.error('Failed to load state from DB', e); }
     }
     initStorage();
@@ -151,15 +146,15 @@ export function App() {
       setCues([]);
       setVideoId(extracted);
       setActiveWordTranslation(null);
-      set('yt_ceviri_video_id', extracted).catch(() => {});
+      setCompatItem(STORAGE_KEYS.VIDEO_ID.primary, STORAGE_KEYS.VIDEO_ID.legacy, extracted).catch(() => {});
 
       if (initialTitle) setYtVideoTitle(initialTitle);
 
       fetchYouTubeMetadata(extracted).then(async (meta) => {
         if (meta.title) setYtVideoTitle(meta.title);
-        const hist = ((await get<HistoryItem[]>('yt_ceviri_history_list')) || []).filter(i => i.videoId !== extracted);
+        const hist = ((await getCompatItem<HistoryItem[]>(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy)) || []).filter(i => i.videoId !== extracted);
         hist.unshift({ videoId: extracted, title: meta.title || initialTitle, timestamp: Date.now() });
-        set('yt_ceviri_history_list', hist.slice(0, useAppStore.getState().historyLimit || 20)).catch(() => {});
+        setCompatItem(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy, hist.slice(0, useAppStore.getState().historyLimit || 20)).catch(() => {});
       }).catch(() => {});
     }
   }, [videoUrl, setVideoId, setCues, setActiveWordTranslation]);
@@ -244,12 +239,37 @@ export function App() {
 
   // Handle Word & Idiom Lookup Events from SubtitleOverlay
   useEffect(() => {
-    const onWord = (e: any) => lookupWordAction(e.detail.word, e.detail.isTargetWord, e.detail.tokenId);
-    const onIdiom = (e: any) => lookupWordAction(e.detail, false, 'idiom-selection');
+    let lastWordTime = 0;
+    let lastWordKey = '';
+    const onWord = (e: any) => {
+      const { word, isTargetWord, tokenId } = e.detail || {};
+      const key = `${word}:${isTargetWord}:${tokenId}`;
+      const now = Date.now();
+      if (lastWordKey === key && now - lastWordTime < 100) return;
+      lastWordKey = key;
+      lastWordTime = now;
+      lookupWordAction(word, isTargetWord, tokenId);
+    };
+
+    let lastIdiomTime = 0;
+    let lastIdiomText = '';
+    const onIdiom = (e: any) => {
+      const text = e.detail || '';
+      const now = Date.now();
+      if (lastIdiomText === text && now - lastIdiomTime < 100) return;
+      lastIdiomText = text;
+      lastIdiomTime = now;
+      lookupWordAction(text, false, 'idiom-selection');
+    };
+
+    window.addEventListener('lexiduo-word-lookup', onWord);
     window.addEventListener('yt-ceviri-word-lookup', onWord);
+    window.addEventListener('lexiduo-idiom-lookup', onIdiom);
     window.addEventListener('yt-ceviri-idiom-lookup', onIdiom);
     return () => {
+      window.removeEventListener('lexiduo-word-lookup', onWord);
       window.removeEventListener('yt-ceviri-word-lookup', onWord);
+      window.removeEventListener('lexiduo-idiom-lookup', onIdiom);
       window.removeEventListener('yt-ceviri-idiom-lookup', onIdiom);
     };
   }, [lookupWordAction]);
@@ -314,23 +334,33 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const onRetry = () => handleRetrySubtitles();
+    let lastRetryTime = 0;
+    const onRetry = () => {
+      const now = Date.now();
+      if (now - lastRetryTime < 500) return;
+      lastRetryTime = now;
+      handleRetrySubtitles();
+    };
+    window.addEventListener('lexiduo-retry-subtitles', onRetry);
     window.addEventListener('yt-ceviri-retry-subtitles', onRetry);
-    return () => window.removeEventListener('yt-ceviri-retry-subtitles', onRetry);
+    return () => {
+      window.removeEventListener('lexiduo-retry-subtitles', onRetry);
+      window.removeEventListener('yt-ceviri-retry-subtitles', onRetry);
+    };
   }, [handleRetrySubtitles]);
 
 
   // Update Local Videos Cache & History
   const updateLocalHistory = useCallback(async (name: string, size: number, cueCount?: number) => {
-    const list = ((await get<any[]>('yt_ceviri_local_history')) || []).filter(i => !(i.name === name && i.size === size));
+    const list = ((await getCompatItem<any[]>(STORAGE_KEYS.LOCAL_HISTORY.primary, STORAGE_KEYS.LOCAL_HISTORY.legacy)) || []).filter(i => !(i.name === name && i.size === size));
     list.unshift({ id: `${name}_${size}`, name, size, timestamp: Date.now(), cueCount });
-    set('yt_ceviri_local_history', list.slice(0, useAppStore.getState().historyLimit || 20)).catch(() => {});
+    setCompatItem(STORAGE_KEYS.LOCAL_HISTORY.primary, STORAGE_KEYS.LOCAL_HISTORY.legacy, list.slice(0, useAppStore.getState().historyLimit || 20)).catch(() => {});
   }, []);
 
   // Handle Selecting a Local File (Choice between On-device Whisper AI or Cloud Gemini API)
   const handleSelectLocalFile = async (file: File) => {
     setVideoId('');
-    set('yt_ceviri_video_id', '').catch(() => {});
+    setCompatItem(STORAGE_KEYS.VIDEO_ID.primary, STORAGE_KEYS.VIDEO_ID.legacy, '').catch(() => {});
 
     if (videoUrl) {
       URL.revokeObjectURL(videoUrl);
@@ -338,10 +368,13 @@ export function App() {
 
     setVideoFile(file);
 
-    const cacheKey = `yt_local_cues_${file.name}_${file.size}_${targetLang}`;
-    const legacyCacheKey = `yt_local_cues_${file.name}_${file.size}`;
+    const cacheKey = `lexiduo_local_cues_${file.name}_${file.size}_${targetLang}`;
+    const legacyCacheKey = `yt_local_cues_${file.name}_${file.size}_${targetLang}`;
+    const oldestCacheKey = `yt_local_cues_${file.name}_${file.size}`;
     try {
-      const cached = (await get<SubtitleCue[]>(cacheKey)) || (await get<SubtitleCue[]>(legacyCacheKey));
+      const cached = (await get<SubtitleCue[]>(cacheKey)) ||
+                     (await get<SubtitleCue[]>(legacyCacheKey)) ||
+                     (await get<SubtitleCue[]>(oldestCacheKey));
       if (cached && Array.isArray(cached) && cached.length > 0) {
         setCues(cached);
         const url = (file as any)?.uri && isNativeWhisperAvailable()
@@ -358,7 +391,11 @@ export function App() {
       console.warn('Failed to read cached cues:', err);
     }
 
-    await refreshWhisperStatus();
+    if (apiKey && apiKey.trim().length > 10) {
+      executeLocalProcessing(file, 'gemini');
+      return;
+    }
+
     setPendingLocalFile(file);
     setIsChoiceModalOpen(true);
   };
@@ -711,43 +748,20 @@ export function App() {
 
       {/* Unified Modals & Overlays */}
       <AppModals
-        isSettingsOpen={isSettingsOpen}
-        setIsSettingsOpen={setIsSettingsOpen}
-        apiKey={apiKey}
-        onSaveApiKey={handleSaveApiKey}
-        isSubtitleSettingsOpen={isSubtitleSettingsOpen}
-        setIsSubtitleSettingsOpen={setIsSubtitleSettingsOpen}
-        isDownloadModalOpen={isDownloadModalOpen}
-        setIsDownloadModalOpen={setIsDownloadModalOpen}
-        videoId={videoId}
-        ytVideoTitle={ytVideoTitle}
-        videoFile={videoFile}
-        cues={cues}
-        sourceLang={sourceLang}
-        targetLang={targetLang}
-        activeWhisperTierName={activeWhisperTierName}
-        isWhisperDownloaded={isWhisperDownloaded}
-        refreshWhisperStatus={refreshWhisperStatus}
-        isYtWhisperModalOpen={isYtWhisperModalOpen}
-        setIsYtWhisperModalOpen={setIsYtWhisperModalOpen}
-        onExecuteYouTubeAudio={handleExecuteYouTubeAudio}
-        pendingLocalFile={pendingLocalFile}
-        setPendingLocalFile={setPendingLocalFile}
-        isChoiceModalOpen={isChoiceModalOpen}
-        setIsChoiceModalOpen={setIsChoiceModalOpen}
-        onExecuteLocalProcessing={executeLocalProcessing}
-        isFloatingGuideOpen={isFloatingGuideOpen}
-        setIsFloatingGuideOpen={setIsFloatingGuideOpen}
-        isYtPlaybackChoiceOpen={isYtPlaybackChoiceOpen}
-        pendingYtVideo={pendingYtVideo}
-        isPreparingYtFloatingSubtitles={isPreparingYtFloatingSubtitles}
-        onConfirmStayInApp={handleConfirmStayInApp}
-        onConfirmContinueOnYouTube={handleConfirmContinueOnYouTube}
-        onCloseYtChoiceModal={handleCloseYtChoiceModal}
-        isProcessing={isProcessing}
-        whisperProgress={whisperProgress}
-        statusText={statusText}
-        progressPercent={progressPercent}
+        isSettingsOpen={isSettingsOpen} setIsSettingsOpen={setIsSettingsOpen}
+        apiKey={apiKey} onSaveApiKey={handleSaveApiKey}
+        isSubtitleSettingsOpen={isSubtitleSettingsOpen} setIsSubtitleSettingsOpen={setIsSubtitleSettingsOpen}
+        isDownloadModalOpen={isDownloadModalOpen} setIsDownloadModalOpen={setIsDownloadModalOpen}
+        videoId={videoId} ytVideoTitle={ytVideoTitle} videoFile={videoFile} cues={cues}
+        sourceLang={sourceLang} targetLang={targetLang}
+        activeWhisperTierName={activeWhisperTierName} isWhisperDownloaded={isWhisperDownloaded} refreshWhisperStatus={refreshWhisperStatus}
+        isYtWhisperModalOpen={isYtWhisperModalOpen} setIsYtWhisperModalOpen={setIsYtWhisperModalOpen} onExecuteYouTubeAudio={handleExecuteYouTubeAudio}
+        pendingLocalFile={pendingLocalFile} setPendingLocalFile={setPendingLocalFile}
+        isChoiceModalOpen={isChoiceModalOpen} setIsChoiceModalOpen={setIsChoiceModalOpen} onExecuteLocalProcessing={executeLocalProcessing}
+        isFloatingGuideOpen={isFloatingGuideOpen} setIsFloatingGuideOpen={setIsFloatingGuideOpen}
+        isYtPlaybackChoiceOpen={isYtPlaybackChoiceOpen} pendingYtVideo={pendingYtVideo} isPreparingYtFloatingSubtitles={isPreparingYtFloatingSubtitles}
+        onConfirmStayInApp={handleConfirmStayInApp} onConfirmContinueOnYouTube={handleConfirmContinueOnYouTube} onCloseYtChoiceModal={handleCloseYtChoiceModal}
+        isProcessing={isProcessing} whisperProgress={whisperProgress} statusText={statusText} progressPercent={progressPercent}
       />
     </div>
   );

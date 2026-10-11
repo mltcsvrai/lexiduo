@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, ChevronDown } from 'lucide-react';
-import { useAppStore, useTranslation } from '@ytceviri/core';
+import { useAppStore, useTranslation } from '@lexiduo/core';
 
 export interface LocalVideoPlayerHandle {
   toggleFullscreen: () => void;

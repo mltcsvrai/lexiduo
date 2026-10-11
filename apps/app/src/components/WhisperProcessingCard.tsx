@@ -1,6 +1,6 @@
 import React from 'react';
 import { Cpu, Flame, Languages, CheckCircle2, Clock, Zap, Waves } from 'lucide-react';
-import { useTranslation } from '@ytceviri/core';
+import { useTranslation } from '@lexiduo/core';
 import type { WhisperProgress, WhisperStage } from '../services/whisperEngine';
 
 interface WhisperProcessingCardProps {

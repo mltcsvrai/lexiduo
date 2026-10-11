@@ -1,20 +1,20 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">YT Translator</string>
-    <string name="title_activity_main">YT Translator</string>
-    <string name="package_name">com.ytceviri.app</string>
-    <string name="custom_url_scheme">com.ytceviri.app</string>
-    <string name="accessibility_service_name">YT Translator Altyazı &amp; Reklam Algılayıcı</string>
+    <string name="app_name">Lexiduo</string>
+    <string name="title_activity_main">Lexiduo</string>
+    <string name="package_name">com.lexiduo.app</string>
+    <string name="custom_url_scheme">com.lexiduo.app</string>
+    <string name="accessibility_service_name">Lexiduo Altyazı &amp; Reklam Algılayıcı</string>
     <string name="accessibility_service_description">YouTube reklamlarını ve oynatıcı durumunu altyazı senkronizasyonu için algılar.</string>
-    <string name="notification_listener_service_name">YT Translator Oynatma Takipçisi</string>
-    <string name="overlay_notification_title">YT Translator Altyazı Katmanı</string>
+    <string name="notification_listener_service_name">Lexiduo Oynatma Takipçisi</string>
+    <string name="overlay_notification_title">Lexiduo Altyazı Katmanı</string>
     <string name="overlay_notification_text">YouTube altyazıları ekranda senkronize ediliyor</string>
     <string name="overlay_ai_fallback_btn">✨ Yapay Zeka / Whisper ile Çevir</string>
     <string name="overlay_subtitles_loading">⏳ Altyazılar Yükleniyor… </string>
     <string name="overlay_subtitles_translating">⏳ Çevriliyor…</string>
     <string name="overlay_ad_frozen">⏳ [Reklam — Altyazı Donduruldu]</string>
     <string name="overlay_ad_waiting">YouTube reklamı bittiğinde devam edecek</string>
-    <string name="overlay_waiting_subtitles">● YT Translator — Altyazı Bekleniyor…</string>
-    <string name="overlay_waiting_speech">● YT Translator — Konuşma Bekleniyor…</string>
-    <string name="overlay_paused">❚❚ YT Translator — Duraklatıldı</string>
+    <string name="overlay_waiting_subtitles">● Lexiduo — Altyazı Bekleniyor…</string>
+    <string name="overlay_waiting_speech">● Lexiduo — Konuşma Bekleniyor…</string>
+    <string name="overlay_paused">❚❚ Lexiduo — Duraklatıldı</string>
 </resources>

@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { MonitorPlay, X, Play, Trash2 } from 'lucide-react';
-import { get, set } from 'idb-keyval';
 import { useTranslation } from '../i18n/useTranslation';
 import type { HistoryItem } from '../types';
 import { enrichHistoryItems } from '../services/videoMetadata';
+import { STORAGE_KEYS, getCompatItem, setCompatItem } from '../services/storageKeys';
 export type { HistoryItem };
 
 
@@ -19,7 +19,7 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, onClose, onLoadVideo }) 
 
   useEffect(() => {
     if (isOpen) {
-      get<HistoryItem[]>('yt_ceviri_history_list').then(data => {
+      getCompatItem<HistoryItem[]>(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy).then(data => {
         if (data && Array.isArray(data)) {
           // Sort by newest first
           const sorted = data.sort((a, b) => b.timestamp - a.timestamp);
@@ -27,7 +27,7 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, onClose, onLoadVideo }) 
           enrichHistoryItems(sorted).then(({ enrichedItems, hasChanges }) => {
             if (hasChanges) {
               setHistory(enrichedItems);
-              set('yt_ceviri_history_list', enrichedItems).catch(() => {});
+              setCompatItem(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy, enrichedItems).catch(() => {});
             }
           });
         }
@@ -37,7 +37,7 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, onClose, onLoadVideo }) 
 
   const handleClear = async () => {
     if (confirm(t('clearHistoryConfirm'))) {
-      await set('yt_ceviri_history_list', []);
+      await setCompatItem(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy, []);
       setHistory([]);
     }
   };
@@ -46,7 +46,7 @@ export const HistoryModal: React.FC<Props> = ({ isOpen, onClose, onLoadVideo }) 
     e.stopPropagation();
     const updated = history.filter(item => item.videoId !== videoId);
     setHistory(updated);
-    await set('yt_ceviri_history_list', updated).catch(() => {});
+    await setCompatItem(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy, updated).catch(() => {});
   };
 
   const handlePlay = (videoId: string) => {

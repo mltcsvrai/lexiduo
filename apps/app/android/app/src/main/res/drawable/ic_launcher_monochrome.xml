@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="60"
+        android:pivotY="60"
+        android:scaleX="0.82"
+        android:scaleY="0.82"
+        android:translateX="-6"
+        android:translateY="-6">
+        <!-- Clean Cut Top Capsule with Negative Space Cutout -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M24,40H66C76,40 86,48 94,58H84.67L78,54V58H34C28.4772,58 24,53.5228 24,48V40Z" />
+        <!-- Clean Cut Bottom Capsule with Negative Space Cutout -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillAlpha="0.75"
+            android:pathData="M24,80H66C76,80 86,72 94,62H84.67L78,66V62H34C28.4772,62 24,66.4772 24,72V80Z" />
+        <!-- Sparkle Star at Top -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M56,34L58,40L64,42L58,44L56,50L54,44L48,42L54,40Z" />
+    </group>
+</vector>

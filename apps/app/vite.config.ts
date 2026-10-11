@@ -11,6 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
+      '@lexiduo/core': path.resolve(__dirname, '../../packages/core/src/index.ts'),
       '@ytceviri/core': path.resolve(__dirname, '../../packages/core/src/index.ts')
     }
   },

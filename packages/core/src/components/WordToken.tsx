@@ -21,10 +21,8 @@ export const WordToken: React.FC<WordTokenProps> = ({
     e.stopPropagation();
     const cleanWord = token.replace(/[.,!?()[\]{}"':;]/g, '');
     if (cleanWord.trim()) {
-      const event = new CustomEvent('yt-ceviri-word-lookup', {
-        detail: { word: cleanWord, isTargetWord, tokenId },
-      });
-      window.dispatchEvent(event);
+      const payload = { word: cleanWord, isTargetWord, tokenId };
+      window.dispatchEvent(new CustomEvent('lexiduo-word-lookup', { detail: payload }));
     }
   };
 

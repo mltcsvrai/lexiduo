@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Sparkles, ExternalLink, Play, Radio, CheckCircle2 } from 'lucide-react';
-import { useTranslation, useAppStore } from '@ytceviri/core';
+import { useTranslation, useAppStore } from '@lexiduo/core';
 import { useAutoYouTubeAssistant } from '../hooks/useAutoYouTubeAssistant';
 
 export interface AutoYouTubeAssistantCardProps {

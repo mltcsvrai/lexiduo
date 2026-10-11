@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { App as CapApp } from '@capacitor/app';
-import { useAppStore } from '@ytceviri/core';
+import { useAppStore } from '@lexiduo/core';
 
 export interface ModalBackStackProps {
   isYtPlaybackChoiceOpen: boolean;

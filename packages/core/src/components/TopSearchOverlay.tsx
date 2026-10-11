@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X, Video, Clipboard as ClipboardIcon, Play, Clock } from 'lucide-react';
-import { get } from 'idb-keyval';
 import { Clipboard } from '@capacitor/clipboard';
 import { useTranslation } from '../i18n/useTranslation';
 import { useAppStore } from '../store/useAppStore';
 import type { HistoryItem } from '../types';
 import { HistoryLimitPicker } from './HistoryLimitPicker';
+import { STORAGE_KEYS, getCompatItem } from '../services/storageKeys';
 
 
 interface TopSearchOverlayProps {
@@ -26,7 +26,7 @@ export const TopSearchOverlay: React.FC<TopSearchOverlayProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      get<HistoryItem[]>('yt_ceviri_history_list').then(data => {
+      getCompatItem<HistoryItem[]>(STORAGE_KEYS.HISTORY_LIST.primary, STORAGE_KEYS.HISTORY_LIST.legacy).then(data => {
         if (data && Array.isArray(data)) {
           setHistory(data.slice(0, historyLimit));
         }

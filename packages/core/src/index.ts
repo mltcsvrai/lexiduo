@@ -125,4 +125,15 @@ export {
   type SubtitleStyleSyncParams,
 } from './utils/colorPalettes';
 
+// Storage Compatibility
+export {
+  STORAGE_KEYS,
+  getCompatItem,
+  setCompatItem,
+  delCompatItem,
+  loadAppPreferences,
+  type LoadedAppPreferences
+} from './services/storageKeys';
+
+
 

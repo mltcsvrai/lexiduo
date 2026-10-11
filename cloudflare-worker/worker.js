@@ -1,5 +1,5 @@
 /**
- * Cloudflare Worker for YT Çeviri App
+ * Cloudflare Worker for Lexiduo App
  * 1. Proxy YouTube InnerTube Subtitle Extraction (/api/transcript?v=VIDEO_ID)
  * 2. Serve Live App Updates & Version Manifest (/version.json)
  * 3. Serve Live App Download Landing Page (/download)
@@ -17,7 +17,8 @@ export default {
           u.hostname === 'localhost' ||
           u.hostname === '127.0.0.1' ||
           u.protocol === 'capacitor:' ||
-          u.hostname === 'yt-ceviri.pages.dev'
+          u.hostname === 'yt-ceviri.pages.dev' ||
+          u.hostname === 'lexiduo.pages.dev'
         ) {
           return true;
         }
@@ -80,7 +81,7 @@ export default {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YT Çeviri - Canlı Güncelleme</title>
+  <title>Lexiduo - Canlı Güncelleme</title>
   <style>
     body { background-color: #020617; color: #f8fafc; font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; text-align: center; }
     .card { background: #0f172a; border: 1px solid rgba(255,255,255,0.1); padding: 32px; border-radius: 24px; max-width: 480px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
@@ -93,7 +94,7 @@ export default {
 </head>
 <body>
   <div class="card">
-    <h1>YT Çeviri</h1>
+    <h1>Lexiduo</h1>
     <span class="badge">Sürüm v1.0.2 Canlıda</span>
     <p>Canlı Güncelleme Servisi Aktif! Uygulamanız yeni özellikleri otomatik olarak Cloudflare üzerinden yüklemiştir.</p>
     <a href="/" class="btn" onclick="window.close(); return false;">Uygulamaya Dön</a>
@@ -432,6 +433,6 @@ export default {
       }
     }
 
-    return new Response('YT Çeviri Cloudflare Worker Operational', { headers: corsHeaders });
+    return new Response('Lexiduo Cloudflare Worker Operational', { headers: corsHeaders });
   }
 };

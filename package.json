@@ -1,16 +1,20 @@
 {
-  "name": "yt-translator-monorepo",
+  "name": "lexiduo-monorepo",
   "private": true,
   "version": "0.0.2",
   "type": "module",
+  "license": "GPL-3.0-or-later",
   "workspaces": [
     "packages/*",
-    "apps/app"
+    "apps/app",
+    "apps/landing"
   ],
   "scripts": {
     "dev": "npm --workspace apps/app run dev",
+    "dev:landing": "npm --workspace apps/landing run dev",
     "build": "npm --workspace apps/app run build",
-    "build:all": "npm --workspace apps/app run build",
+    "build:landing": "npm --workspace apps/landing run build",
+    "build:all": "npm --workspace apps/app run build && npm --workspace apps/landing run build",
     "test": "vitest run",
     "deploy-ota": "node scripts/deploy-ota.js",
     "lint": "oxlint",

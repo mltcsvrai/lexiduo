@@ -7,9 +7,8 @@ import {
   startFloatingOverlay, 
   FloatingSubtitle,
   type SubtitleCue 
-} from '@ytceviri/core';
+} from '@lexiduo/core';
 import { WhisperProcessingCard } from './WhisperProcessingCard';
-import { OfflineModelSection } from './OfflineModelSection';
 import type { WhisperProgress } from '../services/whisperEngine';
 
 const YouTubePlaybackChoiceModal = lazy(() => import('./YouTubePlaybackChoiceModal').then(m => ({ default: m.YouTubePlaybackChoiceModal })));
@@ -86,7 +85,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
   targetLang,
   activeWhisperTierName,
   isWhisperDownloaded,
-  refreshWhisperStatus,
+  refreshWhisperStatus: _refreshWhisperStatus,
   isYtWhisperModalOpen,
   setIsYtWhisperModalOpen,
   onExecuteYouTubeAudio,
@@ -118,7 +117,6 @@ export const AppModals: React.FC<AppModalsProps> = ({
             onClose={() => setIsSettingsOpen(false)}
             currentKey={apiKey}
             onSave={onSaveApiKey}
-            extraSections={<OfflineModelSection />}
           />
         )}
 
@@ -127,7 +125,6 @@ export const AppModals: React.FC<AppModalsProps> = ({
           <SubtitleSettingsModal
             isOpen={isSubtitleSettingsOpen}
             onClose={() => setIsSubtitleSettingsOpen(false)}
-            onWhisperClick={videoId ? () => { refreshWhisperStatus(); setIsYtWhisperModalOpen(true); } : undefined}
           />
         )}
 
@@ -228,7 +225,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
           <WhisperProcessingCard
             progress={whisperProgress}
-            tierName={activeWhisperTierName}
+            tierName="Google Gemini AI"
             fallbackText={statusText}
             fallbackPercent={progressPercent}
           />

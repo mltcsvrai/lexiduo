@@ -1,5 +1,5 @@
 {
-  "name": "yt-translator",
+  "name": "lexiduo",
   "private": true,
   "version": "0.0.2",
   "type": "module",
@@ -18,7 +18,7 @@
     "@capacitor/splash-screen": "^8.0.2",
     "@floating-ui/react": "^0.27.20",
     "@huggingface/transformers": "^4.3.0",
-    "@ytceviri/core": "*",
+    "@lexiduo/core": "*",
     "capacitor-plugin-send-intent": "^0.0.2",
     "idb-keyval": "^6.3.0",
     "lucide-react": "^1.25.0",

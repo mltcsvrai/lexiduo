@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
-import { set } from 'idb-keyval';
 import { useTranslation } from '../i18n/useTranslation';
 import { useAppStore } from '../store/useAppStore';
 import { HISTORY_LIMIT_OPTIONS } from '../types';
+import { STORAGE_KEYS, setCompatItem } from '../services/storageKeys';
 
 export interface HistoryLimitPickerProps {
   value?: number;
@@ -56,7 +56,7 @@ export const HistoryLimitPicker: React.FC<HistoryLimitPickerProps> = ({
       onChange(num);
     } else {
       setStoreLimit(num);
-      await set('yt_ceviri_history_limit', num).catch(() => {});
+      await setCompatItem(STORAGE_KEYS.HISTORY_LIMIT.primary, STORAGE_KEYS.HISTORY_LIMIT.legacy, num).catch(() => {});
     }
     setIsOpen(false);
   };

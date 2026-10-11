@@ -1,6 +1,6 @@
 import React from 'react';
 import { PlayCircle, Layers, X, Sparkles, Loader2, MonitorPlay } from 'lucide-react';
-import { useTranslation } from '@ytceviri/core';
+import { useTranslation } from '@lexiduo/core';
 
 export interface YouTubePlaybackChoiceModalProps {
   isOpen: boolean;

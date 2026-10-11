@@ -96,8 +96,11 @@ export const InteractiveTranscriptPanel: React.FC<InteractiveTranscriptPanelProp
           <button
             type="button"
             onClick={() => {
-              if (onRetry) onRetry();
-              window.dispatchEvent(new CustomEvent('yt-ceviri-retry-subtitles'));
+              if (onRetry) {
+                onRetry();
+              } else {
+                window.dispatchEvent(new CustomEvent('lexiduo-retry-subtitles'));
+              }
             }}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold border border-white/10 shadow-lg transition-all active:scale-95 cursor-pointer"
           >

@@ -78,15 +78,26 @@ async function fetchCdnStreamBlob(
   const isNative = typeof window !== 'undefined' && typeof (window as any).Capacitor !== 'undefined' && Boolean((window as any).Capacitor.isNativePlatform?.());
   if (isNative) {
     // 1. On Native Android, attempt Filesystem.downloadFile to Cache to bypass 1MB bridge IPC limits
+    let progressListener: any = null;
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
       const tempFilename = `temp_dl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.mp4`;
+      progressListener = await Filesystem.addListener('progress', (p: any) => {
+        const totalBytes = p.contentLength || 0;
+        const loadedBytes = p.bytes || 0;
+        const pct = totalBytes > 0 ? Math.min(100, Math.round((loadedBytes / totalBytes) * 100)) : 50;
+        onProgress?.(pct, loadedBytes, totalBytes);
+      });
       const dlRes = await Filesystem.downloadFile({
         url: streamUrl,
         path: tempFilename,
         directory: Directory.Cache,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14)' },
         progress: true
       });
+      await progressListener?.remove();
+      progressListener = null;
+
       if (dlRes?.path) {
         const { Capacitor } = await import('@capacitor/core');
         const localSrc = Capacitor.convertFileSrc(dlRes.path);
@@ -98,6 +109,14 @@ async function fetchCdnStreamBlob(
       }
     } catch (fsDlErr) {
       console.warn('Native Filesystem.downloadFile fallback to stream fetch:', fsDlErr);
+    } finally {
+      if (progressListener) {
+        try {
+          await progressListener.remove();
+        } catch {
+          // ignore cleanup error
+        }
+      }
     }
 
     try {

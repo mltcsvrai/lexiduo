@@ -10,7 +10,7 @@ import {
   AlertCircle,
   Cpu
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@ytceviri/core';
+import { useTranslation, type TranslationKey } from '@lexiduo/core';
 import { 
   WHISPER_TIERS,
   type WhisperTierKey,
@@ -339,6 +339,14 @@ export const OfflineModelSection: React.FC = () => {
                           ? `ℹ️ ${t('largeModelBalancedNote')}`
                           : `⚠️ ${t('largeModelLowMemoryNote')}`}
                     </span>
+                  </div>
+                )}
+
+                {/* Mobile CPU Performance Advisory for Heavy Models (Small & Large v3 Turbo) */}
+                {(tier.id === 'small' || tier.id === 'large-v3-turbo') && (
+                  <div className="py-1.5 px-2.5 rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-200 text-[10px] leading-tight flex items-start gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                    <span className="leading-snug">{t('heavyModelGuidanceNotice')}</span>
                   </div>
                 )}
               </div>

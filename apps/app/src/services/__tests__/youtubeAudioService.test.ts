@@ -6,7 +6,7 @@ import {
   fetchClientDirectAudioStream 
 } from '../youtubeAudioService';
 import * as audioExtractor from '../audioExtractor';
-import * as coreModule from '@ytceviri/core';
+import * as coreModule from '@lexiduo/core';
 
 describe('youtubeAudioService', () => {
   const originalFetch = globalThis.fetch;
