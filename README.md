@@ -5,7 +5,7 @@
 <h1 align="center">Lexiduo</h1>
 
 <p align="center">
-  <strong>Context-aware, AI-powered dual subtitle translator and language learning ecosystem for Android and Web.</strong><br>
+  <strong>Context-aware, AI-powered dual subtitle translator and language learning ecosystem for Android.</strong><br>
   All-in-one unified application supporting YouTube streaming, local video playback with on-demand Whisper AI speech recognition, and synchronized floating overlay across Android apps.
 </p>
 
