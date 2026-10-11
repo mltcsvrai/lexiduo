@@ -28,10 +28,9 @@
 
 ## ✨ Features
 
-- 📺 **Polymorphic Dual-Mode Player**: Seamlessly switch between online YouTube streams and local video files (MP4, MKV, MOV, WebM).
+- 📺 **Polymorphic Dual-Mode Player**: Seamlessly switch between online YouTube streams and local video files (MP4, MKV).
 - 🪟 **Synchronized YouTube Floating Overlay**: Watch videos in the official YouTube app while a floating, draggable bilingual subtitle capsule stays synchronized via native Android MediaSession & Accessibility Services.
 - 🛑 **Intelligent Ad Detection**: Accessibility scanner detects YouTube ads in real time and freezes subtitles (`AD_BREAK_FREEZE`) until the ad concludes.
-- 🎙️ **On-Device Whisper AI (Offline Speech-to-Text)**: Automatically transcribes captionless local videos using Web Audio 16kHz PCM extraction and an on-demand, lightweight Whisper WASM/ONNX model (~39 MB) with zero server transmission.
 - 🧠 **Context-Aware AI Translation**: Translates complete grammatical sentences using Google Gemini AI to capture conversational nuances rather than broken word-by-word literal translation.
 - 📐 **Zero-Drift Sentence Segmentation**: Automatically aggregates speech captions using punctuation, natural speech pauses ($\ge 0.75\text{s}$), and word limits, distributing translated text across proportional time windows with strict frame-accurate synchronization.
 - 📖 **Interactive Word Lookup & Pronunciation**: Tap any subtitle word to pause playback, inspect instant definitions, listen to native pronunciation (Text-to-Speech via Web Speech API), or copy it.
