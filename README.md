@@ -11,7 +11,6 @@
 
 <p align="center">
   <a href="https://github.com/mltcsvrai/lexiduo/releases/latest"><img src="https://img.shields.io/github/v/release/mltcsvrai/lexiduo?color=blue&label=Release" alt="Latest Release"></a>
-  <a href="https://github.com/mltcsvrai/lexiduo/releases"><img src="https://img.shields.io/github/downloads/mltcsvrai/lexiduo/total?color=blueviolet&label=Downloads" alt="Total Downloads"></a>
   <a href="https://github.com/mltcsvrai/lexiduo/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License: GPL v3"></a>
   <a href="https://capacitorjs.com"><img src="https://img.shields.io/badge/Capacitor-8-119EFF.svg?logo=capacitor&logoColor=white" alt="Capacitor"></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=white" alt="React 19"></a>
