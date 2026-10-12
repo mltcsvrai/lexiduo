@@ -34,7 +34,7 @@
 - 📐 **Zero-Drift Sentence Segmentation**: Automatically aggregates speech captions using punctuation, natural speech pauses ($\ge 0.75\text{s}$), and word limits, distributing translated text across proportional time windows with strict frame-accurate synchronization.
 - 📖 **Interactive Word Lookup & Pronunciation**: Tap any subtitle word to pause playback, inspect instant definitions, listen to native pronunciation (Text-to-Speech via Web Speech API), or copy it.
 - 📜 **Interactive Transcript & Tablet Split-View**: Full scrollable transcript panel with real-time sentence tracking and one-tap video seeking. Supports phones (portrait/landscape), split-screen and tablets.
-- 🌍 **35 Global Languages & RTL Support**: Complete interface localization and subtitle support across 35 languages, including Right-to-Left (RTL) layout support for Arabic, Hebrew, and Persian.
+- 🌍 **35 Global Languages & RTL Support**: Complete interface localization and subtitle support across 35 languages (English, Turkish, German, French and more), including Right-to-Left (RTL) layout support for Arabic, Hebrew, and Persian.
 - 📲 **System Share Intent & Smart Clipboard**: Automatically detects YouTube links from Android's "Share" menu or the system clipboard upon resuming the app.
 
 ---
