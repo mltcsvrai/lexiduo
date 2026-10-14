@@ -98,7 +98,7 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
   const [localHistory, setLocalHistory] = useState<LocalHistoryItem[]>([]);
   const [historyLayout, setHistoryLayout] = useState<'grid' | 'list'>('grid');
   const [isWhisperModalOpen, setIsWhisperModalOpen] = useState(false);
-  const isWhisperUiEnabled = false;
+  const isWhisperUiEnabled = true;
   const [activeModel, setActiveModel] = useState<{
     id: string;
     name: string;

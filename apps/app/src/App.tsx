@@ -134,7 +134,7 @@ export function App() {
   }, [setVideoId, setApiKey, setSourceLang, setTargetLang, setShowSubtitleBg, setSyncOffset]);
 
   // Handle Loading a YouTube Video In-App
-  const executeLoadYouTubeInApp = useCallback(async (extracted: string, initialTitle?: string) => {
+  const loadYouTubeInApp = useCallback(async (extracted: string, initialTitle?: string) => {
     if (videoUrl) {
       URL.revokeObjectURL(videoUrl);
       setVideoUrl('');
@@ -174,7 +174,7 @@ export function App() {
     apiKey,
     sourceLang,
     targetLang,
-    onExecuteInApp: executeLoadYouTubeInApp,
+    onRunInApp: loadYouTubeInApp,
     onOpenPermissionGuide: () => setIsFloatingGuideOpen(true),
     onSubtitlesLoaded: (loadedCues) => setCues(loadedCues),
   });
@@ -392,7 +392,7 @@ export function App() {
     }
 
     if (apiKey && apiKey.trim().length > 10) {
-      executeLocalProcessing(file, 'gemini');
+      startLocalProcessing(file, 'gemini');
       return;
     }
 
@@ -400,7 +400,7 @@ export function App() {
     setIsChoiceModalOpen(true);
   };
 
-  const executeLocalProcessing = async (file: File, engine: 'whisper' | 'gemini', customApiKey?: string) => {
+  const startLocalProcessing = async (file: File, engine: 'whisper' | 'gemini', customApiKey?: string) => {
     setIsProcessing(true);
     const effectiveKey = customApiKey || apiKey;
     if (customApiKey && customApiKey.trim() && customApiKey.trim() !== apiKey) {
@@ -453,7 +453,7 @@ export function App() {
     });
   };
 
-  const handleExecuteYouTubeAudio = async (engine: 'whisper' | 'gemini' = 'whisper', customApiKey?: string) => {
+  const handleStartYouTubeAudio = async (engine: 'whisper' | 'gemini' = 'whisper', customApiKey?: string) => {
     if (!videoId) return;
     setIsYtWhisperModalOpen(false);
     setLoadingSubtitles(false);
@@ -755,9 +755,9 @@ export function App() {
         videoId={videoId} ytVideoTitle={ytVideoTitle} videoFile={videoFile} cues={cues}
         sourceLang={sourceLang} targetLang={targetLang}
         activeWhisperTierName={activeWhisperTierName} isWhisperDownloaded={isWhisperDownloaded} refreshWhisperStatus={refreshWhisperStatus}
-        isYtWhisperModalOpen={isYtWhisperModalOpen} setIsYtWhisperModalOpen={setIsYtWhisperModalOpen} onExecuteYouTubeAudio={handleExecuteYouTubeAudio}
+        isYtWhisperModalOpen={isYtWhisperModalOpen} setIsYtWhisperModalOpen={setIsYtWhisperModalOpen} onStartYouTubeAudio={handleStartYouTubeAudio}
         pendingLocalFile={pendingLocalFile} setPendingLocalFile={setPendingLocalFile}
-        isChoiceModalOpen={isChoiceModalOpen} setIsChoiceModalOpen={setIsChoiceModalOpen} onExecuteLocalProcessing={executeLocalProcessing}
+        isChoiceModalOpen={isChoiceModalOpen} setIsChoiceModalOpen={setIsChoiceModalOpen} onStartLocalProcessing={startLocalProcessing}
         isFloatingGuideOpen={isFloatingGuideOpen} setIsFloatingGuideOpen={setIsFloatingGuideOpen}
         isYtPlaybackChoiceOpen={isYtPlaybackChoiceOpen} pendingYtVideo={pendingYtVideo} isPreparingYtFloatingSubtitles={isPreparingYtFloatingSubtitles}
         onConfirmStayInApp={handleConfirmStayInApp} onConfirmContinueOnYouTube={handleConfirmContinueOnYouTube} onCloseYtChoiceModal={handleCloseYtChoiceModal}

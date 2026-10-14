@@ -10,6 +10,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.lexiduo.app.whisper.NativeRustBridge;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -214,55 +216,73 @@ public class NativeAudioExtractor {
                         short[] rawShorts = new short[shortCount];
                         outputBuffer.asShortBuffer().get(rawShorts);
 
-                        // 1. Downmix multi-channel to mono
-                        int monoFrameCount = shortCount / Math.max(1, inputChannels);
-                        short[] monoSamples = new short[monoFrameCount];
-                        for (int frame = 0; frame < monoFrameCount; frame++) {
-                            int sum = 0;
-                            int frameOffset = frame * inputChannels;
-                            for (int ch = 0; ch < inputChannels; ch++) {
-                                sum += rawShorts[frameOffset + ch];
-                            }
-                            monoSamples[frame] = (short) (sum / inputChannels);
-                        }
-
-                        // 2. Resample mono to 16,000 Hz if needed
-                        if (inputSampleRate == TARGET_SAMPLE_RATE) {
-                            byte[] pcmBytes = shortArrayToByteArray(monoSamples);
-                            fos.write(pcmBytes);
-                            totalMonoSamplesWritten += monoSamples.length;
-                        } else {
-                            // High-speed linear interpolation streaming resampler
-                            int outEstimated = (int) Math.ceil(monoFrameCount / Math.max(0.01, resampleRatio)) + 16;
-                            short[] resampled = new short[outEstimated];
-                            int outCount = 0;
-
-                            double pos = resamplePhase;
-                            while (pos < monoFrameCount) {
-                                int idx0 = (int) Math.floor(pos);
-                                int idx1 = idx0 + 1;
-                                double frac = pos - idx0;
-
-                                short s0 = (idx0 >= 0) ? monoSamples[idx0] : lastInputSample;
-                                short s1 = (idx1 < monoFrameCount) ? monoSamples[idx1] : s0;
-
-                                short interp = (short) Math.round(s0 + frac * (s1 - s0));
-                                if (outCount >= resampled.length) {
-                                    resampled = java.util.Arrays.copyOf(resampled, resampled.length * 2);
-                                }
-                                resampled[outCount++] = interp;
-                                pos += resampleRatio;
-                            }
-
-                            resamplePhase = pos - monoFrameCount;
-                            if (monoFrameCount > 0) {
-                                lastInputSample = monoSamples[monoFrameCount - 1];
-                            }
-
-                            if (outCount > 0) {
-                                byte[] pcmBytes = shortArrayToByteArray(resampled, outCount);
+                        if (NativeRustBridge.isLoaded()) {
+                            double[] resampleState = new double[]{resamplePhase, (double) lastInputSample};
+                            byte[] pcmBytes = NativeRustBridge.downmixAndResamplePcm(
+                                    rawShorts,
+                                    inputChannels,
+                                    inputSampleRate,
+                                    TARGET_SAMPLE_RATE,
+                                    resampleState
+                            );
+                            if (pcmBytes != null && pcmBytes.length > 0) {
                                 fos.write(pcmBytes);
-                                totalMonoSamplesWritten += outCount;
+                                totalMonoSamplesWritten += (pcmBytes.length / 2);
+                                resamplePhase = resampleState[0];
+                                lastInputSample = (short) Math.round(resampleState[1]);
+                            }
+                        } else {
+                            // Pure Java Fallback:
+                            // 1. Downmix multi-channel to mono
+                            int monoFrameCount = shortCount / Math.max(1, inputChannels);
+                            short[] monoSamples = new short[monoFrameCount];
+                            for (int frame = 0; frame < monoFrameCount; frame++) {
+                                int sum = 0;
+                                int frameOffset = frame * inputChannels;
+                                for (int ch = 0; ch < inputChannels; ch++) {
+                                    sum += rawShorts[frameOffset + ch];
+                                }
+                                monoSamples[frame] = (short) (sum / inputChannels);
+                            }
+
+                            // 2. Resample mono to 16,000 Hz if needed
+                            if (inputSampleRate == TARGET_SAMPLE_RATE) {
+                                byte[] pcmBytes = shortArrayToByteArray(monoSamples);
+                                fos.write(pcmBytes);
+                                totalMonoSamplesWritten += monoSamples.length;
+                            } else {
+                                // High-speed linear interpolation streaming resampler
+                                int outEstimated = (int) Math.ceil(monoFrameCount / Math.max(0.01, resampleRatio)) + 16;
+                                short[] resampled = new short[outEstimated];
+                                int outCount = 0;
+
+                                double pos = resamplePhase;
+                                while (pos < monoFrameCount) {
+                                    int idx0 = (int) Math.floor(pos);
+                                    int idx1 = idx0 + 1;
+                                    double frac = pos - idx0;
+
+                                    short s0 = (idx0 >= 0) ? monoSamples[idx0] : lastInputSample;
+                                    short s1 = (idx1 < monoFrameCount) ? monoSamples[idx1] : s0;
+
+                                    short interp = (short) Math.round(s0 + frac * (s1 - s0));
+                                    if (outCount >= resampled.length) {
+                                        resampled = java.util.Arrays.copyOf(resampled, resampled.length * 2);
+                                    }
+                                    resampled[outCount++] = interp;
+                                    pos += resampleRatio;
+                                }
+
+                                resamplePhase = pos - monoFrameCount;
+                                if (monoFrameCount > 0) {
+                                    lastInputSample = monoSamples[monoFrameCount - 1];
+                                }
+
+                                if (outCount > 0) {
+                                    byte[] pcmBytes = shortArrayToByteArray(resampled, outCount);
+                                    fos.write(pcmBytes);
+                                    totalMonoSamplesWritten += outCount;
+                                }
                             }
                         }
                     }

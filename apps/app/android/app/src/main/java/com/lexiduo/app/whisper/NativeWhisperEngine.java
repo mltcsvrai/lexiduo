@@ -177,21 +177,40 @@ public class NativeWhisperEngine {
                 }
                 BackgroundTaskService.updateTask(context, bgTaskId, detail, progressPct);
 
-                // Zero-copy on-demand chunk streaming from disk (only 800 KB RAM instead of entire video in heap)
-                float[] chunkSlice = readWavChunk(wavFile, startSample, chunkSampleCount);
-
-                // Energy-based Voice Activity Detection (VAD)
-                // Optimize threshold: directly skip low-energy/silence chunks (< 0.00015) to prevent unnecessary heavy inference
-                double energy = calculateEnergy(chunkSlice);
-                if (energy >= 0.00015) {
-                    String recognizedText = inferChunkWithOnnx(chunkSlice, nMels, language, modelTier);
-                    if (recognizedText != null && !recognizedText.trim().isEmpty()) {
-                        List<SubtitleCue> splitCues = splitSentenceCues(
-                                recognizedText.trim(),
-                                chunkStartMs,
-                                chunkEndMs
-                        );
-                        cues.addAll(splitCues);
+                // High-performance combined Rust fast path or pure Java fallback
+                if (NativeRustBridge.isLoaded()) {
+                    float[] flatFeatures = NativeRustBridge.extractMelFromWavChunk(
+                            wavFile.getAbsolutePath(),
+                            startSample,
+                            chunkSampleCount,
+                            nMels,
+                            0.00015f
+                    );
+                    if (flatFeatures != null && flatFeatures.length > 0) {
+                        String recognizedText = inferChunkWithFlatFeatures(flatFeatures, nMels, language, modelTier);
+                        if (recognizedText != null && !recognizedText.trim().isEmpty()) {
+                            List<SubtitleCue> splitCues = splitSentenceCues(
+                                    recognizedText.trim(),
+                                    chunkStartMs,
+                                    chunkEndMs
+                            );
+                            cues.addAll(splitCues);
+                        }
+                    }
+                } else {
+                    // Fallback: on-demand chunk streaming and Java VAD
+                    float[] chunkSlice = readWavChunk(wavFile, startSample, chunkSampleCount);
+                    double energy = calculateEnergy(chunkSlice);
+                    if (energy >= 0.00015) {
+                        String recognizedText = inferChunkWithOnnx(chunkSlice, nMels, language, modelTier);
+                        if (recognizedText != null && !recognizedText.trim().isEmpty()) {
+                            List<SubtitleCue> splitCues = splitSentenceCues(
+                                    recognizedText.trim(),
+                                    chunkStartMs,
+                                    chunkEndMs
+                            );
+                            cues.addAll(splitCues);
+                        }
                     }
                 }
             }
@@ -311,7 +330,27 @@ public class NativeWhisperEngine {
     }
 
     /**
-     * Executes ONNX Runtime encoder and autoregressive greedy decoder for an audio chunk.
+     * High-speed ONNX inference using flat 1D features from Rust wrapped in a zero-copy FloatBuffer.
+     */
+    private String inferChunkWithFlatFeatures(float[] flatFeatures, int nMels, String language, String modelTier) {
+        if (currentEncoderSession == null || currentDecoderSession == null || ortEnv == null || flatFeatures == null) {
+            return "";
+        }
+
+        try {
+            FloatBuffer featureBuffer = FloatBuffer.wrap(flatFeatures);
+            long[] tensorShape = new long[]{1L, (long) nMels, 3000L};
+            try (OnnxTensor inputFeaturesTensor = OnnxTensor.createTensor(ortEnv, featureBuffer, tensorShape)) {
+                return runEncoderAndDecoder(inputFeaturesTensor, language, modelTier);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "ONNX flat features inference notice: " + t.getMessage());
+            return "";
+        }
+    }
+
+    /**
+     * Executes ONNX Runtime encoder and autoregressive greedy decoder for an audio chunk (Pure Java Fallback).
      */
     private String inferChunkWithOnnx(float[] chunkAudio, int nMels, String language, String modelTier) {
         if (currentEncoderSession == null || currentDecoderSession == null || ortEnv == null) {
@@ -323,10 +362,19 @@ public class NativeWhisperEngine {
             float[][][] features = featureExtractor.extractFeatures(chunkAudio, nMels);
 
             try (OnnxTensor inputFeaturesTensor = OnnxTensor.createTensor(ortEnv, features)) {
-                // 2. Run Encoder Session
-                Map<String, OnnxTensor> encoderInputs = Collections.singletonMap("input_features", inputFeaturesTensor);
-                try (OrtSession.Result encoderOutput = currentEncoderSession.run(encoderInputs)) {
-                    OnnxTensor hiddenStates = (OnnxTensor) encoderOutput.get(0);
+                return runEncoderAndDecoder(inputFeaturesTensor, language, modelTier);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "ONNX inference chunk notice: " + t.getMessage());
+            return "";
+        }
+    }
+
+    private String runEncoderAndDecoder(OnnxTensor inputFeaturesTensor, String language, String modelTier) throws Exception {
+        // Run Encoder Session
+        Map<String, OnnxTensor> encoderInputs = Collections.singletonMap("input_features", inputFeaturesTensor);
+        try (OrtSession.Result encoderOutput = currentEncoderSession.run(encoderInputs)) {
+            OnnxTensor hiddenStates = (OnnxTensor) encoderOutput.get(0);
 
                     // 3. Autoregressive Greedy Search Loop
                     long[] promptTokens = tokenizer.getInitialPromptTokens(language, modelTier);
@@ -415,11 +463,6 @@ public class NativeWhisperEngine {
 
                     return tokenizer.decode(finalTokens);
                 }
-            }
-        } catch (Throwable t) {
-            Log.w(TAG, "ONNX inference chunk notice: " + t.getMessage());
-            return "";
-        }
     }
 
     public synchronized void close() {

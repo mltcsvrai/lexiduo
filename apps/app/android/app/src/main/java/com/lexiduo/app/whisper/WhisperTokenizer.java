@@ -93,7 +93,16 @@ public class WhisperTokenizer {
                 sb.append(line);
             }
 
-            JSONObject root = new JSONObject(sb.toString());
+            String jsonContent = sb.toString();
+            if (NativeRustBridge.isLoaded()) {
+                try {
+                    NativeRustBridge.loadTokenizerJson(jsonContent);
+                } catch (Throwable t) {
+                    Log.w(TAG, "Native tokenizer load notice: " + t.getMessage());
+                }
+            }
+
+            JSONObject root = new JSONObject(jsonContent);
             JSONObject model = root.optJSONObject("model");
             JSONObject vocab = model != null ? model.optJSONObject("vocab") : root.optJSONObject("vocab");
 
@@ -163,9 +172,9 @@ public class WhisperTokenizer {
         int langToken = 50259; // Default English
         if (language != null) {
             String clean = language.trim().toLowerCase();
-            String langKey = "<|" + clean + "|>";
-            if (tokenToId.containsKey(langKey)) {
-                langToken = tokenToId.get(langKey);
+            String langTag = "<|" + clean + "|>";
+            if (tokenToId.containsKey(langTag)) {
+                langToken = tokenToId.get(langTag);
             } else if (isLargeV3 && LARGE_V3_LANGUAGE_TOKENS.containsKey(clean)) {
                 langToken = LARGE_V3_LANGUAGE_TOKENS.get(clean);
             } else if (STANDARD_LANGUAGE_TOKENS.containsKey(clean)) {
@@ -185,6 +194,17 @@ public class WhisperTokenizer {
      * Decodes an array of token IDs into clean human-readable text.
      */
     public String decode(@NonNull long[] tokenIds) {
+        if (NativeRustBridge.isLoaded()) {
+            try {
+                String nativeDecoded = NativeRustBridge.decodeTokens(tokenIds);
+                if (nativeDecoded != null) {
+                    return nativeDecoded;
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "Native decodeTokens error, falling back to Java: " + t.getMessage());
+            }
+        }
+
         StringBuilder sb = new StringBuilder();
         for (long id : tokenIds) {
             int intId = (int) id;

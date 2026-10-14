@@ -40,6 +40,30 @@ public class WhisperFeatureExtractor {
     }
 
     /**
+     * Extracts normalized Log-Mel Spectrogram features as a flat 1D array of length [nMels * 3000].
+     * Avoids 3D array creation and allows direct FloatBuffer.wrap for zero-copy ONNX inference.
+     */
+    public float[] extractFeaturesFlat(float[] audio, int nMels) {
+        if (NativeRustBridge.isLoaded()) {
+            try {
+                float[] flat = NativeRustBridge.extractMelFeaturesFlat(audio, nMels);
+                if (flat != null && flat.length == nMels * TARGET_FRAMES) {
+                    return flat;
+                }
+            } catch (Throwable ignored) {
+                // Fallback below
+            }
+        }
+
+        float[][][] f3d = extractFeatures(audio, nMels);
+        float[] flat = new float[nMels * TARGET_FRAMES];
+        for (int m = 0; m < nMels; m++) {
+            System.arraycopy(f3d[0][m], 0, flat, m * TARGET_FRAMES, TARGET_FRAMES);
+        }
+        return flat;
+    }
+
+    /**
      * Extracts normalized Log-Mel Spectrogram features with shape [1][nMels][3000].
      *
      * @param audio Normalized float audio samples [-1.0f, 1.0f]
@@ -47,6 +71,21 @@ public class WhisperFeatureExtractor {
      * @return 3D float array with shape [1][nMels][3000] ready for ONNX tensor creation
      */
     public float[][][] extractFeatures(float[] audio, int nMels) {
+        if (NativeRustBridge.isLoaded()) {
+            try {
+                float[] flat = NativeRustBridge.extractMelFeaturesFlat(audio, nMels);
+                if (flat != null && flat.length == nMels * TARGET_FRAMES) {
+                    float[][][] result = new float[1][nMels][TARGET_FRAMES];
+                    for (int m = 0; m < nMels; m++) {
+                        System.arraycopy(flat, m * TARGET_FRAMES, result[0][m], 0, TARGET_FRAMES);
+                    }
+                    return result;
+                }
+            } catch (Throwable ignored) {
+                // Fallback to pure Java implementation below
+            }
+        }
+
         float[][] melFilters = getMelFilters(nMels);
 
         // 1. Pad or truncate audio to exactly TARGET_SAMPLES (480,000)

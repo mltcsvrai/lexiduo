@@ -92,6 +92,26 @@ cd apps/app/android && ./gradlew assembleRelease
 
 ---
 
+## 🔒 Security, Permissions & Privacy Architecture
+
+Lexiduo is designed with a strict zero-telemetry, privacy-first architecture. Because several advanced native features require elevated Android platform permissions, our implementation enforces strict architectural safeguards to prevent false positives and guarantee user privacy:
+
+| Component & Permission | Architectural Safeguards & Scope | Purpose |
+| :--- | :--- | :--- |
+| **Accessibility Service**<br>`YouTubeAccessibilityScanner`<br>`BIND_ACCESSIBILITY_SERVICE` | • Strictly scoped to `packageNames="com.google.android.youtube"` both at the OS manifest/XML config level and runtime package verification.<br>• **100% Read-Only:** Zero automated clicks, key injections, or touch gestures (`performAction` is never invoked). | Inspects YouTube UI hierarchy exclusively to detect active video ad intervals (`AD_BREAK_FREEZE`) and portrait video titles. |
+| **Floating Overlay**<br>`FloatingOverlayService`<br>`SYSTEM_ALERT_WINDOW` | • Configured with `WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE` and `FLAG_LAYOUT_NO_LIMITS`.<br>• Cannot intercept keystrokes, soft-keyboard inputs, or touch events intended for background apps. | Renders non-intrusive bilingual subtitle capsules while you watch videos inside the YouTube app. |
+| **Notification Listener**<br>`YouTubeNotificationListenerService`<br>`BIND_NOTIFICATION_LISTENER_SERVICE` | • **Zero Message Reading:** Never extracts notification text, senders, or message bodies (`extras` are completely ignored).<br>• Listens exclusively for `com.google.android.youtube` `MediaSession` playback tokens. | Synchronizes playback state (play/pause/seek) and timestamp progress with the floating overlay. |
+| **Smart Clipboard**<br>`Clipboard.read()` | • Evaluated entirely in-memory on app resume using an offline 11-character regex (`extractYouTubeId`).<br>• If the clipboard text is not a valid YouTube URL/ID, it is discarded immediately without retention. Never transmitted over the network. | Automatically loads shared YouTube video links when you switch back to Lexiduo. |
+
+### ℹ️ Android 13+ Sideloading Notice ("Allow Restricted Settings")
+When sideloading APKs outside Google Play on Android 13 and newer, Android automatically restricts Accessibility and Notification Listener permissions for downloaded apps as a default platform security precaution:
+1. Open Android **Settings** ➔ **Apps** ➔ **Lexiduo**.
+2. Tap the **three dots (⋮)** in the top right corner.
+3. Select **"Allow restricted settings"** and confirm with your device PIN or biometric unlock.
+4. You can now enable the Accessibility Service and Notification Listener in their respective Android settings menus.
+
+---
+
 ## 📄 License
 
 This project is licensed under the [GNU General Public License v3.0](LICENSE).

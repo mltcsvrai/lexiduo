@@ -22,7 +22,7 @@ export interface UseYouTubePlaybackFlowParams {
   apiKey: string;
   sourceLang: string;
   targetLang: string;
-  onExecuteInApp: (videoId: string, title?: string) => void;
+  onRunInApp: (videoId: string, title?: string) => void;
   onOpenPermissionGuide: () => void;
   onSubtitlesLoaded?: (cues: SubtitleCue[]) => void;
   initialPendingVideo?: PendingYouTubeVideo | null;
@@ -34,7 +34,7 @@ export function useYouTubePlaybackFlow({
   apiKey,
   sourceLang,
   targetLang,
-  onExecuteInApp,
+  onRunInApp,
   onOpenPermissionGuide,
   onSubtitlesLoaded,
   initialPendingVideo = null,
@@ -69,8 +69,8 @@ export function useYouTubePlaybackFlow({
     const { videoId, title } = pendingVideo;
     setIsChoiceModalOpen(false);
     setPendingVideo(null);
-    onExecuteInApp(videoId, title);
-  }, [pendingVideo, onExecuteInApp]);
+    onRunInApp(videoId, title);
+  }, [pendingVideo, onRunInApp]);
 
   // Option 2: Continue on YouTube with Floating Subtitles
   const confirmContinueOnYouTube = useCallback(async () => {

@@ -29,12 +29,22 @@ android/.gradle/
 android/app/release.jks
 android/app/debug.keystore
 android/local.properties
+apps/app/android/app/build/
+apps/app/android/.gradle/
+apps/app/android/local.properties
+*.jks
+*.keystore
+keystore.properties
 .capacitor/
 
 # Cloudflare
 cloudflare-worker/.wrangler/
 cloudflare-worker/node_modules/
 .dev.vars
+
+# Rust target
+target/
+**/target/
 
 # APK binaries
 *.apk

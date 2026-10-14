@@ -267,7 +267,7 @@ public class FloatingOverlayService extends Service {
         instance.mainHandler.post(() -> {
             if (instance.tvLangBadge == null) return;
             boolean hasLangs = srcLang != null && dstLang != null && !srcLang.isEmpty() && !dstLang.isEmpty();
-            instance.tvLangBadge.setVisibility(hasLangs ? View.VISIBLE : View.GONE);
+            FloatingOverlayStyleHelper.setViewVisible(instance.tvLangBadge, hasLangs);
             if (hasLangs) instance.tvLangBadge.setText(srcLang.toUpperCase() + " ➔ " + dstLang.toUpperCase());
         });
     }
@@ -285,7 +285,7 @@ public class FloatingOverlayService extends Service {
                     }
                     instance.updateUiForCurrentTime();
                 }
-                if (instance.aiFallbackLayout != null) instance.aiFallbackLayout.setVisibility(show ? View.VISIBLE : View.GONE);
+                FloatingOverlayStyleHelper.setViewVisible(instance.aiFallbackLayout, show);
             });
         }
     }
@@ -382,18 +382,18 @@ public class FloatingOverlayService extends Service {
         autoLoadingTimeoutRunnable = () -> {
             isAutoLoading = false;
             if (cuesList.isEmpty() && AutoYouTubeDetector.getInstance().isAutoModeEnabled()) {
-                if (aiFallbackLayout != null) aiFallbackLayout.setVisibility(View.VISIBLE);
+                FloatingOverlayStyleHelper.setViewVisible(aiFallbackLayout, true);
                 updateUiForCurrentTime();
             }
         };
         mainHandler.postDelayed(autoLoadingTimeoutRunnable, 15000L);
 
         mainHandler.post(() -> {
-            if (cardContainer != null) cardContainer.setVisibility(View.VISIBLE);
-            if (contentContainer != null) contentContainer.setVisibility(View.VISIBLE);
+            FloatingOverlayStyleHelper.setViewVisible(cardContainer, true);
+            FloatingOverlayStyleHelper.setViewVisible(contentContainer, true);
             if (tvLangBadge != null) {
                 boolean hasLangs = srcLang != null && dstLang != null && !srcLang.isEmpty() && !dstLang.isEmpty();
-                tvLangBadge.setVisibility(hasLangs ? View.VISIBLE : View.GONE);
+                FloatingOverlayStyleHelper.setViewVisible(tvLangBadge, hasLangs);
                 if (hasLangs) tvLangBadge.setText(srcLang.toUpperCase() + " ➔ " + dstLang.toUpperCase());
             }
             if (cuesList.isEmpty()) {
@@ -403,12 +403,12 @@ public class FloatingOverlayService extends Service {
                 }
                 if (tvSourceSubtitle != null) {
                     tvSourceSubtitle.setText("");
-                    tvSourceSubtitle.setVisibility(View.GONE);
+                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
                 }
             } else {
                 updateUiForCurrentTime();
             }
-            if (aiFallbackLayout != null) aiFallbackLayout.setVisibility(View.GONE);
+            FloatingOverlayStyleHelper.setViewVisible(aiFallbackLayout, false);
         });
     }
 
@@ -427,10 +427,7 @@ public class FloatingOverlayService extends Service {
         }
         Log.i(TAG, "Loaded " + cuesList.size() + " subtitle cues.");
         mainHandler.post(() -> {
-            if (aiFallbackLayout != null) {
-                aiFallbackLayout.setVisibility(!hasCues && AutoYouTubeDetector.getInstance().isAutoModeEnabled()
-                        ? View.VISIBLE : View.GONE);
-            }
+            FloatingOverlayStyleHelper.setViewVisible(aiFallbackLayout, !hasCues && AutoYouTubeDetector.getInstance().isAutoModeEnabled());
             updateUiForCurrentTime();
         });
     }
@@ -444,13 +441,11 @@ public class FloatingOverlayService extends Service {
             autoLoadingTimeoutRunnable = null;
         }
         mainHandler.post(() -> {
-            if (aiFallbackLayout != null) {
-                aiFallbackLayout.setVisibility(View.GONE);
-            }
+            FloatingOverlayStyleHelper.setViewVisible(aiFallbackLayout, false);
             if (tvTargetSubtitle != null) tvTargetSubtitle.setText("");
             if (tvSourceSubtitle != null) {
                 tvSourceSubtitle.setText("");
-                tvSourceSubtitle.setVisibility(View.GONE);
+                FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
             }
             updateUiForCurrentTime();
         });
@@ -527,7 +522,7 @@ public class FloatingOverlayService extends Service {
         if (tvLangBadge != null && AutoYouTubeDetector.getInstance().isAutoModeEnabled()) {
             String src = AutoYouTubeDetector.getInstance().getSourceLang();
             String dst = AutoYouTubeDetector.getInstance().getTargetLang();
-            tvLangBadge.setVisibility(View.VISIBLE);
+            FloatingOverlayStyleHelper.setViewVisible(tvLangBadge, true);
             tvLangBadge.setText(src.toUpperCase() + " ➔ " + dst.toUpperCase());
         }
 
@@ -567,14 +562,14 @@ public class FloatingOverlayService extends Service {
         }
 
         if (isBubbleMode) {
-            if (cardContainer != null) cardContainer.setVisibility(View.GONE);
-            if (bubbleContainer != null) bubbleContainer.setVisibility(View.VISIBLE);
+            FloatingOverlayStyleHelper.setViewVisible(cardContainer, false);
+            FloatingOverlayStyleHelper.setViewVisible(bubbleContainer, true);
             savedCardWidth = windowParams.width;
             windowParams.width = dpToPx(48);
             windowParams.height = dpToPx(48);
         } else {
-            if (bubbleContainer != null) bubbleContainer.setVisibility(View.GONE);
-            if (cardContainer != null) cardContainer.setVisibility(View.VISIBLE);
+            FloatingOverlayStyleHelper.setViewVisible(bubbleContainer, false);
+            FloatingOverlayStyleHelper.setViewVisible(cardContainer, true);
             windowParams.width = Math.max(savedCardWidth, dpToPx(280));
             windowParams.height = WindowManager.LayoutParams.WRAP_CONTENT;
         }
@@ -623,9 +618,7 @@ public class FloatingOverlayService extends Service {
         if (overlayView == null) return;
 
         if (AutoYouTubeDetector.getInstance().isCardDismissedForCurrentVideo()) {
-            if (cardContainer != null && cardContainer.getVisibility() != View.GONE) {
-                cardContainer.setVisibility(View.GONE);
-            }
+            FloatingOverlayStyleHelper.setViewVisible(cardContainer, false);
             return;
         }
 
@@ -638,7 +631,7 @@ public class FloatingOverlayService extends Service {
             }
             if (tvSourceSubtitle != null) {
                 tvSourceSubtitle.setText(getString(R.string.overlay_ad_waiting));
-                tvSourceSubtitle.setVisibility(View.VISIBLE);
+                FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, true);
             }
             return;
         }
@@ -666,7 +659,7 @@ public class FloatingOverlayService extends Service {
             }
             if (tvSourceSubtitle != null) {
                 tvSourceSubtitle.setText("");
-                tvSourceSubtitle.setVisibility(View.GONE);
+                FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
             }
             return;
         }
@@ -695,7 +688,7 @@ public class FloatingOverlayService extends Service {
                 if (tvSourceSubtitle != null) {
                     tvSourceSubtitle.setTextColor(0xFF80D8FF);
                     tvSourceSubtitle.setText(getString(R.string.overlay_subtitles_translating));
-                    tvSourceSubtitle.setVisibility(View.VISIBLE);
+                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, true);
                 }
             } else if (hasTarget && hasSource && (!isIdentical || !expectTranslation)) {
                 // Bilingual: translated target in primary, original source in secondary
@@ -706,7 +699,7 @@ public class FloatingOverlayService extends Service {
                 if (tvSourceSubtitle != null) {
                     tvSourceSubtitle.setTextColor(sCustomSourceColor != null ? sCustomSourceColor : 0xFFB0BEC5);
                     tvSourceSubtitle.setText(source);
-                    tvSourceSubtitle.setVisibility(View.VISIBLE);
+                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, true);
                 }
             } else if (hasTarget && hasSource && isIdentical && expectTranslation) {
                 // Untranslated identical fallback: keep source visible, show translating badge
@@ -717,7 +710,7 @@ public class FloatingOverlayService extends Service {
                 if (tvSourceSubtitle != null) {
                     tvSourceSubtitle.setTextColor(0xFF80D8FF);
                     tvSourceSubtitle.setText(getString(R.string.overlay_subtitles_translating));
-                    tvSourceSubtitle.setVisibility(View.VISIBLE);
+                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, true);
                 }
             } else {
                 String singleText = hasTarget ? target : source;
@@ -727,12 +720,10 @@ public class FloatingOverlayService extends Service {
                 }
                 if (tvSourceSubtitle != null) {
                     tvSourceSubtitle.setText("");
-                    tvSourceSubtitle.setVisibility(View.GONE);
+                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
                 }
             }
-            if (aiFallbackLayout != null && aiFallbackLayout.getVisibility() == View.VISIBLE) {
-                aiFallbackLayout.setVisibility(View.GONE);
-            }
+            FloatingOverlayStyleHelper.setViewVisible(aiFallbackLayout, false);
         } else {
             if (tvTargetSubtitle != null) {
                 tvTargetSubtitle.setTextColor(0xFF9E9E9E);
@@ -740,7 +731,7 @@ public class FloatingOverlayService extends Service {
             }
             if (tvSourceSubtitle != null) {
                 tvSourceSubtitle.setText("");
-                tvSourceSubtitle.setVisibility(View.GONE);
+                FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
             }
         }
     }

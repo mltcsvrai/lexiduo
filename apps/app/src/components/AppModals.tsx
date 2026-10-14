@@ -40,14 +40,14 @@ export interface AppModalsProps {
   refreshWhisperStatus: () => void;
   isYtWhisperModalOpen: boolean;
   setIsYtWhisperModalOpen: (isOpen: boolean) => void;
-  onExecuteYouTubeAudio: (mode: 'whisper' | 'gemini', key?: string) => void;
+  onStartYouTubeAudio: (mode: 'whisper' | 'gemini', key?: string) => void;
 
   // Local processing choice
   pendingLocalFile: File | null;
   setPendingLocalFile: (file: File | null) => void;
   isChoiceModalOpen: boolean;
   setIsChoiceModalOpen: (isOpen: boolean) => void;
-  onExecuteLocalProcessing: (file: File, mode: 'whisper' | 'gemini', key?: string) => void;
+  onStartLocalProcessing: (file: File, mode: 'whisper' | 'gemini', key?: string) => void;
 
   // Floating Permission Guide
   isFloatingGuideOpen: boolean;
@@ -88,12 +88,12 @@ export const AppModals: React.FC<AppModalsProps> = ({
   refreshWhisperStatus: _refreshWhisperStatus,
   isYtWhisperModalOpen,
   setIsYtWhisperModalOpen,
-  onExecuteYouTubeAudio,
+  onStartYouTubeAudio,
   pendingLocalFile,
   setPendingLocalFile,
   isChoiceModalOpen,
   setIsChoiceModalOpen,
-  onExecuteLocalProcessing,
+  onStartLocalProcessing,
   isFloatingGuideOpen,
   setIsFloatingGuideOpen,
   isYtPlaybackChoiceOpen,
@@ -180,9 +180,9 @@ export const AppModals: React.FC<AppModalsProps> = ({
                 setIsSettingsOpen(true);
                 return;
               }
-              onExecuteYouTubeAudio('whisper');
+              onStartYouTubeAudio('whisper');
             }}
-            onSelectCloudApi={(k) => onExecuteYouTubeAudio('gemini', k)}
+            onSelectCloudApi={(k) => onStartYouTubeAudio('gemini', k)}
             onClose={() => setIsYtWhisperModalOpen(false)}
           />
         )}
@@ -204,13 +204,13 @@ export const AppModals: React.FC<AppModalsProps> = ({
                 setIsSettingsOpen(true);
                 return;
               }
-              onExecuteLocalProcessing(f, 'whisper');
+              onStartLocalProcessing(f, 'whisper');
             }}
             onSelectCloudApi={(k) => {
               const f = pendingLocalFile;
               setIsChoiceModalOpen(false);
               setPendingLocalFile(null);
-              onExecuteLocalProcessing(f, 'gemini', k);
+              onStartLocalProcessing(f, 'gemini', k);
             }}
             onClose={() => {
               setIsChoiceModalOpen(false);

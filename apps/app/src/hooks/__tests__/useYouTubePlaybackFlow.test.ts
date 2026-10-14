@@ -35,7 +35,7 @@ describe('useYouTubePlaybackFlow hook logic', () => {
         apiKey: '',
         sourceLang: 'auto',
         targetLang: 'tr',
-        onExecuteInApp: vi.fn(),
+        onRunInApp: vi.fn(),
         onOpenPermissionGuide: vi.fn(),
       });
       return null;
@@ -73,7 +73,7 @@ describe('useYouTubePlaybackFlow hook logic', () => {
         apiKey: '',
         sourceLang: 'auto',
         targetLang: 'tr',
-        onExecuteInApp: vi.fn(),
+        onRunInApp: vi.fn(),
         onOpenPermissionGuide: mockOnOpenPermissionGuide,
         initialPendingVideo: pending,
       });
@@ -113,7 +113,7 @@ describe('useYouTubePlaybackFlow hook logic', () => {
         apiKey: 'key123',
         sourceLang: 'auto',
         targetLang: 'tr',
-        onExecuteInApp: vi.fn(),
+        onRunInApp: vi.fn(),
         onOpenPermissionGuide: vi.fn(),
         initialPendingVideo: pending,
       });
@@ -160,7 +160,7 @@ describe('useYouTubePlaybackFlow hook logic', () => {
         apiKey: 'key123',
         sourceLang: 'auto',
         targetLang: 'tr',
-        onExecuteInApp: vi.fn(),
+        onRunInApp: vi.fn(),
         onOpenPermissionGuide: vi.fn(),
         onSubtitlesLoaded: mockOnSubtitlesLoaded,
         initialPendingVideo: pending,
