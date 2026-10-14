@@ -124,6 +124,21 @@ Lexiduo release binaries are fully audited and free of malware, spyware, or PUPs
   <img src="assets/screenshots/virustotal_report.png" alt="VirusTotal 100% Clean Scan Report" width="600" />
 </p>
 
+### ⚠️ Google Play Protect False-Positive Notice & Installation Guide
+
+Because Lexiduo is an open-source sideloaded application that incorporates an **Accessibility Service** (for YouTube ad-freeze detection) and a **Notification Listener** (for MediaSession playback sync), **Google Play Protect's automated "Enhanced Fraud Protection" will block installation** with a generic *"Harmful app blocked"* screen without providing an *"Install anyway"* option.
+
+> [!NOTE]
+> **This is a 100% FALSE POSITIVE.** Lexiduo is zero-telemetry, open source under GNU GPLv3, and audited with **0 / 65 clean detections on VirusTotal**.
+
+**To install successfully on Android:**
+1. Open the **Google Play Store** app on your phone.
+2. Tap your **Profile icon** (top right) ➔ **Play Protect**.
+3. Tap the **Settings (gear icon)** in the top right corner.
+4. **Temporarily turn OFF** *"Scan apps with Play Protect"* (select *Pause* if prompted).
+5. Tap and install `app-release.apk` from your Downloads folder.
+6. *Re-enable Play Protect scanning afterward for your everyday device security!*
+
 ### ℹ️ Android 13+ Sideloading Notice ("Allow Restricted Settings")
 When sideloading APKs outside Google Play on Android 13 and newer, Android automatically restricts Accessibility and Notification Listener permissions for downloaded apps as a default platform security precaution:
 1. Open Android **Settings** ➔ **Apps** ➔ **Lexiduo**.
