@@ -1,5 +1,6 @@
 import type { SubtitleCue } from '../types';
 import { getCueTextForExport, type SubtitleExportMode } from './subtitleExportService';
+import { parseFmp4Samples } from './fmp4ParserHelper';
 
 export interface SubtitleTrackExport {
   language: string;
@@ -126,6 +127,7 @@ interface Mp4SampleInfo {
   offset: number;
   size: number;
   timeMs: number;
+  dtsMs?: number;
   isKeyframe: boolean;
 }
 
@@ -202,6 +204,32 @@ function parseMp4Tracks(buf: Uint8Array): { durationMs: number; tracks: ParsedMp
       }
     }
     scan += boxSize;
+  }
+
+  // If tracks have 0 samples (fragmented MP4 / fMP4), parse moof/trun boxes
+  if (tracks.some(t => t.samples.length === 0)) {
+    try {
+      const trackTimescales = new Map<number, number>();
+      const trackTypeMap = new Map<number, 'video' | 'audio'>();
+      for (const t of tracks) {
+        trackTimescales.set(t.trackId, t.timescale);
+        trackTypeMap.set(t.trackId, t.type);
+      }
+      const fmp4SamplesByTrack = parseFmp4Samples(buf, trackTimescales, trackTypeMap);
+      for (const t of tracks) {
+        if (t.samples.length === 0 && fmp4SamplesByTrack.has(t.trackId)) {
+          const fSamples = fmp4SamplesByTrack.get(t.trackId) || [];
+          t.samples = fSamples;
+          if (fSamples.length > 0) {
+            const lastSample = fSamples[fSamples.length - 1];
+            t.durationMs = Math.max(t.durationMs, lastSample.timeMs);
+            movieDurationMs = Math.max(movieDurationMs, lastSample.timeMs);
+          }
+        }
+      }
+    } catch (fmp4Err) {
+      console.debug('fMP4 parsing failed:', fmp4Err);
+    }
   }
 
   return { durationMs: movieDurationMs, tracks };
@@ -392,12 +420,14 @@ function parseTrakBox(buf: Uint8Array, trakOffset: number, trakSize: number): Pa
         const isKey = stssSet.size > 0 ? stssSet.has(currentSampleIdx + 1) : true;
         const pts = currentDts + (cttsTable[currentSampleIdx] || 0);
         const timeMs = timescale > 0 ? (pts / timescale) * 1000 : 0;
+        const dtsMs = timescale > 0 ? (currentDts / timescale) * 1000 : 0;
 
         samples.push({
           trackNumber: handlerType === 'vide' ? 1 : 2,
           offset: chunkOffsetRunning,
           size: sampleSize,
           timeMs,
+          dtsMs,
           isKeyframe: isKey
         });
 
@@ -592,11 +622,30 @@ export async function muxSubtitlesIntoMkv(videoBlob: Blob, tracks: SubtitleTrack
       tracks
     );
 
-    // Collect and sort all media samples
-    const allSamples: Mp4SampleInfo[] = [];
-    if (videoTrack) allSamples.push(...videoTrack.samples);
-    if (audioTrack) allSamples.push(...audioTrack.samples);
-    allSamples.sort((a, b) => a.timeMs - b.timeMs);
+    // Interleave video and audio maintaining strict decode order (DTS) within each track
+    const mergedSamples: Mp4SampleInfo[] = [];
+    let vIdx = 0;
+    let aIdx = 0;
+    const vSamples = videoTrack?.samples || [];
+    const aSamples = audioTrack?.samples || [];
+    const vLen = vSamples.length;
+    const aLen = aSamples.length;
+
+    while (vIdx < vLen || aIdx < aLen) {
+      if (vIdx >= vLen) {
+        mergedSamples.push(aSamples[aIdx++]);
+      } else if (aIdx >= aLen) {
+        mergedSamples.push(vSamples[vIdx++]);
+      } else {
+        const vDts = vSamples[vIdx].dtsMs ?? vSamples[vIdx].timeMs;
+        const aDts = aSamples[aIdx].dtsMs ?? aSamples[aIdx].timeMs;
+        if (vDts <= aDts) {
+          mergedSamples.push(vSamples[vIdx++]);
+        } else {
+          mergedSamples.push(aSamples[aIdx++]);
+        }
+      }
+    }
 
     // Build subtitle cues map per track
     const subCuesByTrack = tracks.map((t, idx) => ({
@@ -614,8 +663,8 @@ export async function muxSubtitlesIntoMkv(videoBlob: Blob, tracks: SubtitleTrack
     let currentClusterTime = 0;
 
     let maxTimeMs = effectiveDurationMs;
-    if (allSamples.length > 0) {
-      const lastSampleTime = allSamples[allSamples.length - 1].timeMs;
+    if (mergedSamples.length > 0) {
+      const lastSampleTime = mergedSamples[mergedSamples.length - 1].timeMs;
       if (Number.isFinite(lastSampleTime) && lastSampleTime > 0) {
         maxTimeMs = Math.max(maxTimeMs, lastSampleTime);
       }
@@ -629,15 +678,18 @@ export async function muxSubtitlesIntoMkv(videoBlob: Blob, tracks: SubtitleTrack
       }
     }
 
-    while (currentClusterTime <= maxTimeMs || sampleIdx < allSamples.length) {
+    while (currentClusterTime <= maxTimeMs || sampleIdx < mergedSamples.length) {
       const clusterEnd = currentClusterTime + CLUSTER_WINDOW_MS;
       const clusterBlocks: Uint8Array[] = [
         ebmlUint([0xE7], Math.round(currentClusterTime)) // Cluster Timestamp
       ];
 
       // Add media samples falling in this window
-      while (sampleIdx < allSamples.length && allSamples[sampleIdx].timeMs < clusterEnd) {
-        const s = allSamples[sampleIdx];
+      while (
+        sampleIdx < mergedSamples.length &&
+        (mergedSamples[sampleIdx].dtsMs ?? mergedSamples[sampleIdx].timeMs) < clusterEnd
+      ) {
+        const s = mergedSamples[sampleIdx];
         const frameData = buf.subarray(s.offset, s.offset + s.size);
         const relTime = s.timeMs - currentClusterTime;
         clusterBlocks.push(createSimpleBlock(s.trackNumber, relTime, s.isKeyframe, frameData));

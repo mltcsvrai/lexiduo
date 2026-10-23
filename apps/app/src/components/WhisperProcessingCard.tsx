@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, Flame, Languages, CheckCircle2, Clock, Zap, Waves } from 'lucide-react';
+import { Cpu, Flame, Languages, CheckCircle2, Clock, Zap, Waves, X } from 'lucide-react';
 import { useTranslation } from '@lexiduo/core';
 import type { WhisperProgress, WhisperStage } from '../services/whisperEngine';
 
@@ -8,6 +8,7 @@ interface WhisperProcessingCardProps {
   tierName?: string;
   fallbackText?: string;
   fallbackPercent?: number;
+  onCancel?: () => void;
 }
 
 function formatDuration(seconds?: number): string {
@@ -21,13 +22,50 @@ export const WhisperProcessingCard: React.FC<WhisperProcessingCardProps> = ({
   progress,
   tierName = 'Whisper AI',
   fallbackText,
-  fallbackPercent = 0
+  fallbackPercent = 0,
+  onCancel
 }) => {
   const { t, language } = useTranslation();
 
   const stage: WhisperStage = progress?.stage || 'transcribing';
   const percent = progress?.percent ?? progress?.progress ?? fallbackPercent;
-  const detail = progress?.detail || fallbackText || t('stageTranscribing');
+
+  // Map stage codes and filter hardcoded Turkish status strings from native into localized messages
+  const getLocalizedDetail = (): string => {
+    const rawDetail = progress?.detail?.trim() || fallbackText?.trim() || '';
+
+    // Filter out hardcoded Turkish status patterns sent from bridge/native
+    const isTurkishLeak = /deşifre|ses ayıklan|hazırlan|çevril|parça/i.test(rawDetail);
+
+    if (!rawDetail || isTurkishLeak) {
+      switch (stage) {
+        case 'extracting':
+          return t('stageExtracting');
+        case 'warming_up':
+          return t('stageWarmingUp');
+        case 'segmenting':
+          return t('stageSegmenting');
+        case 'translating':
+          return t('stageTranslating');
+        case 'ready':
+          return t('stageReady');
+        case 'transcribing':
+        default:
+          return t('stageTranscribing');
+      }
+    }
+
+    if (rawDetail === 'extracting') return t('stageExtracting');
+    if (rawDetail === 'warming_up') return t('stageWarmingUp');
+    if (rawDetail === 'transcribing') return t('stageTranscribing');
+    if (rawDetail === 'segmenting') return t('stageSegmenting');
+    if (rawDetail === 'translating') return t('stageTranslating');
+    if (rawDetail === 'ready') return t('stageReady');
+
+    return rawDetail;
+  };
+
+  const detail = getLocalizedDetail();
   const processedSec = progress?.processedSeconds;
   const totalSec = progress?.totalSeconds;
   const etaSec = progress?.etaSeconds;
@@ -73,7 +111,22 @@ export const WhisperProcessingCard: React.FC<WhisperProcessingCardProps> = ({
   };
 
   return (
-    <div className="w-full max-w-lg mx-auto flex flex-col items-center justify-center p-6 sm:p-7 rounded-3xl bg-slate-900/90 border border-indigo-500/30 shadow-2xl backdrop-blur-2xl animate-in fade-in duration-300">
+    <div className="relative w-full max-w-lg mx-auto flex flex-col items-center justify-center p-6 sm:p-7 rounded-3xl bg-slate-900/90 border border-indigo-500/30 shadow-2xl backdrop-blur-2xl animate-in fade-in duration-300">
+      {onCancel && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCancel();
+          }}
+          className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800/80 transition cursor-pointer z-10"
+          aria-label={t('close')}
+          title={t('close')}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      )}
+
       {/* Icon Badge */}
       <div className="w-16 h-16 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center mb-4 shadow-lg shadow-indigo-500/10">
         {renderStageIcon()}

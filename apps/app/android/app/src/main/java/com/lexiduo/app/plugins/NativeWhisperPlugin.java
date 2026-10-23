@@ -24,19 +24,10 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.lexiduo.app.audio.NativeAudioExtractor;
 import com.lexiduo.app.services.BackgroundTaskService;
 import com.lexiduo.app.whisper.NativeWhisperEngine;
+import com.lexiduo.app.whisper.WhisperModelDownloader;
 
-import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.security.MessageDigest;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -49,9 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @CapacitorPlugin(name = "NativeWhisper")
 public class NativeWhisperPlugin extends Plugin {
     private static final String TAG = "NativeWhisperPlugin";
-    private static final Set<String> ALLOWED_TIER_IDS = Collections.unmodifiableSet(
-            new HashSet<>(Arrays.asList("tiny", "base", "small", "large-v3-turbo"))
-    );
+    private static final java.util.Set<String> ALLOWED_TIER_IDS = WhisperModelDownloader.ALLOWED_TIER_IDS;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final AtomicBoolean isExtractionCancelled = new AtomicBoolean(false);
@@ -240,61 +229,19 @@ public class NativeWhisperPlugin extends Plugin {
     }
 
     /**
-     * Resolves and validates local model directory path against traversal attacks.
-     */
-    private File getSafeModelDir(String rawTierId) throws IllegalArgumentException, IOException {
-        if (rawTierId == null || rawTierId.trim().isEmpty()) {
-            throw new IllegalArgumentException("Model tier cannot be empty");
-        }
-        String cleanTier = rawTierId.trim();
-        if (!cleanTier.matches("^[a-zA-Z0-9_-]{3,20}$") || !ALLOWED_TIER_IDS.contains(cleanTier)) {
-            throw new IllegalArgumentException("Disallowed or invalid Whisper model tier: " + cleanTier);
-        }
-        File baseDir = new File(getContext().getFilesDir(), "whisper_models");
-        if (!baseDir.exists() && !baseDir.mkdirs()) {
-            Log.w(TAG, "Failed creating whisper_models base directory");
-        }
-        File modelDir = new File(baseDir, cleanTier);
-        if (!modelDir.getCanonicalPath().startsWith(baseDir.getCanonicalPath())) {
-            throw new SecurityException("Directory traversal attempt detected in tierId: " + cleanTier);
-        }
-        return modelDir;
-    }
-
-    /**
      * Checks whether a Whisper model tier is downloaded and stored on internal disk.
      */
     @PluginMethod
     public void isModelDownloaded(PluginCall call) {
         String tierId = call.getString("tierId", "tiny");
         try {
-            File modelDir = getSafeModelDir(tierId);
-
-            boolean downloaded = false;
-            long totalSize = 0;
-
-            if (modelDir.exists() && modelDir.isDirectory()) {
-                File[] files = modelDir.listFiles();
-                boolean hasEncoder = false;
-                boolean hasDecoder = false;
-                boolean hasTokenizer = false;
-
-                if (files != null) {
-                    for (File f : files) {
-                        String name = f.getName().toLowerCase();
-                        if (name.startsWith("encoder") && name.endsWith(".onnx") && f.length() > 0) hasEncoder = true;
-                        if (name.startsWith("decoder") && name.endsWith(".onnx") && !name.contains("merged") && !name.contains("with_past") && f.length() > 0) hasDecoder = true;
-                        if (name.equals("tokenizer.json") && f.length() > 0) hasTokenizer = true;
-                        totalSize += f.length();
-                    }
-                }
-                downloaded = hasEncoder && hasDecoder && hasTokenizer;
-            }
-
+            WhisperModelDownloader.ModelStatus status = WhisperModelDownloader.checkModelStatus(getContext(), tierId);
             JSObject ret = new JSObject();
-            ret.put("isDownloaded", downloaded);
-            ret.put("sizeBytes", totalSize);
+            ret.put("isDownloaded", status.isDownloaded);
+            ret.put("sizeBytes", status.sizeBytes);
             ret.put("tierId", tierId);
+            ret.put("hasGgml", status.hasGgml);
+            ret.put("hasMergedDecoder", status.hasMergedDecoder);
             call.resolve(ret);
         } catch (Exception e) {
             Log.e(TAG, "Error checking model status: " + tierId, e);
@@ -303,114 +250,43 @@ public class NativeWhisperPlugin extends Plugin {
     }
 
     /**
-     * Downloads Whisper ONNX model files directly to internal storage from Hugging Face CDN.
+     * Downloads Whisper model files directly to internal storage.
      */
     @PluginMethod
     public void downloadModelTier(PluginCall call) {
         String tierId = call.getString("tierId", "tiny");
+        boolean preferGgml = call.getBoolean("preferGgml", false);
 
         executor.execute(() -> {
             try {
-                File modelDir = getSafeModelDir(tierId);
-                if (!modelDir.exists()) {
-                    modelDir.mkdirs();
-                }
-
-                String repoName = "onnx-community/whisper-" + tierId;
-                String[] filesToDownload = new String[]{
-                        "onnx/encoder_model_q4.onnx",
-                        "onnx/decoder_model_q4.onnx",
-                        "tokenizer.json"
+                Context ctx = getContext();
+                WhisperModelDownloader.ProgressListener listener = (tId, fileIndex, totalFiles, percent, fileName) -> {
+                    JSObject p = new JSObject();
+                    p.put("tierId", tId);
+                    p.put("fileIndex", fileIndex);
+                    p.put("totalFiles", totalFiles);
+                    p.put("percent", percent);
+                    p.put("fileName", fileName);
+                    notifyListeners("downloadProgress", p);
                 };
 
-                for (int i = 0; i < filesToDownload.length; i++) {
-                    String relPath = filesToDownload[i];
-                    String fileName = relPath.substring(relPath.lastIndexOf('/') + 1);
-                    File destFile = new File(modelDir, fileName);
-
-                    if (destFile.exists() && destFile.length() > 1024) {
-                        continue; // Already downloaded
-                    }
-
-                    String urlStr = "https://huggingface.co/" + repoName + "/resolve/main/" + relPath;
-                    downloadFileWithProgress(urlStr, destFile, tierId, i + 1, filesToDownload.length);
+                if (preferGgml) {
+                    WhisperModelDownloader.downloadGgmlModel(ctx, tierId, listener);
+                } else {
+                    WhisperModelDownloader.downloadOnnxModel(ctx, tierId, listener);
                 }
 
+                File modelDir = WhisperModelDownloader.getSafeModelDir(ctx, tierId);
                 JSObject ret = new JSObject();
                 ret.put("success", true);
                 ret.put("tierId", tierId);
                 ret.put("modelPath", modelDir.getAbsolutePath());
                 call.resolve(ret);
-
             } catch (Exception e) {
                 Log.e(TAG, "Error downloading model tier " + tierId, e);
                 call.reject("Download failed: " + e.getMessage());
             }
         });
-    }
-
-    private void downloadFileWithProgress(String urlStr, File destFile, String tierId, int fileIndex, int totalFiles) throws Exception {
-        URL url = new URL(urlStr);
-        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-        conn.setInstanceFollowRedirects(true);
-        conn.setConnectTimeout(30000);
-        conn.setReadTimeout(60000);
-
-        int responseCode = conn.getResponseCode();
-        if (responseCode == HttpURLConnection.HTTP_MOVED_PERM || responseCode == HttpURLConnection.HTTP_MOVED_TEMP) {
-            String newUrl = conn.getHeaderField("Location");
-            conn = (HttpURLConnection) new URL(newUrl).openConnection();
-            conn.setConnectTimeout(30000);
-            conn.setReadTimeout(60000);
-        }
-
-        long fileLength = conn.getContentLengthLong();
-        File tempFile = new File(destFile.getAbsolutePath() + ".tmp");
-        boolean completed = false;
-
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            try (InputStream in = new BufferedInputStream(conn.getInputStream());
-                 FileOutputStream out = new FileOutputStream(tempFile)) {
-
-                byte[] buffer = new byte[32768];
-                long totalRead = 0;
-                int bytesRead;
-
-                long lastNotifyTime = 0;
-                while ((bytesRead = in.read(buffer)) != -1) {
-                    out.write(buffer, 0, bytesRead);
-                    digest.update(buffer, 0, bytesRead);
-                    totalRead += bytesRead;
-
-                    long now = System.currentTimeMillis();
-                    if (now - lastNotifyTime > 300) {
-                        lastNotifyTime = now;
-                        int filePct = fileLength > 0 ? (int) ((totalRead * 100) / fileLength) : 0;
-                        int overallPct = (int) ((((fileIndex - 1) + (filePct / 100.0)) / totalFiles) * 100);
-
-                        JSObject p = new JSObject();
-                        p.put("tierId", tierId);
-                        p.put("fileIndex", fileIndex);
-                        p.put("totalFiles", totalFiles);
-                        p.put("percent", Math.min(99, overallPct));
-                        p.put("fileName", destFile.getName());
-                        notifyListeners("downloadProgress", p);
-                    }
-                }
-            }
-
-            if (tempFile.renameTo(destFile)) {
-                Log.i(TAG, "Successfully downloaded " + destFile.getName() + " (" + destFile.length() + " bytes)");
-                completed = true;
-            } else {
-                throw new IOException("Failed to rename temporary file to destination: " + destFile.getAbsolutePath());
-            }
-        } finally {
-            if (!completed && tempFile.exists()) {
-                tempFile.delete();
-            }
-        }
     }
 
     /**
@@ -420,29 +296,15 @@ public class NativeWhisperPlugin extends Plugin {
     public void deleteModelTier(PluginCall call) {
         String tierId = call.getString("tierId", "tiny");
         try {
-            File modelDir = getSafeModelDir(tierId);
-            boolean deleted = deleteRecursive(modelDir);
-
+            boolean deleted = WhisperModelDownloader.deleteModelDir(getContext(), tierId);
             JSObject ret = new JSObject();
             ret.put("deleted", deleted);
             ret.put("tierId", tierId);
             call.resolve(ret);
-        } catch (IllegalArgumentException | SecurityException | IOException e) {
+        } catch (Exception e) {
             Log.e(TAG, "Failed deleting model tier: " + tierId, e);
             call.reject("Failed deleting model tier: " + e.getMessage());
         }
-    }
-
-    private boolean deleteRecursive(File fileOrDir) {
-        if (fileOrDir.isDirectory()) {
-            File[] children = fileOrDir.listFiles();
-            if (children != null) {
-                for (File child : children) {
-                    deleteRecursive(child);
-                }
-            }
-        }
-        return fileOrDir.delete();
     }
 
     /**
@@ -517,8 +379,9 @@ public class NativeWhisperPlugin extends Plugin {
                         language,
                         (progressPct, detail, currentChunk, totalChunks, processedMs, totalMs) -> {
                             JSObject p = new JSObject();
-                            p.put("stage", "transcribing");
+                            p.put("stage", detail != null && !detail.isEmpty() ? detail : "transcribing");
                             p.put("progress", progressPct);
+                            p.put("percent", progressPct);
                             p.put("detail", detail);
                             p.put("currentChunk", currentChunk);
                             p.put("totalChunks", totalChunks);

@@ -260,6 +260,14 @@ export const BG_COLOR_SWATCHES: string[] = [
   '#1C1816', '#0C1E33', '#111827', '#1F2937',
 ];
 
+import type {
+  SubtitleMode,
+  SubtitleFontFamily,
+  SubtitleFontWeight,
+  SubtitleTextOutline,
+  SubtitleBgWidthMode
+} from '../types';
+
 export interface SubtitleStyleSyncParams {
   sourceTextColor?: string;
   targetTextColor?: string;
@@ -267,7 +275,11 @@ export interface SubtitleStyleSyncParams {
   bgOpacity?: number;
   fontSize?: number;
   showSubtitleBg?: boolean;
-  bgWidthMode?: string;
+  bgWidthMode?: SubtitleBgWidthMode | string;
+  subtitleMode?: SubtitleMode | string;
+  fontFamily?: SubtitleFontFamily | string;
+  fontWeight?: SubtitleFontWeight | string;
+  textOutline?: SubtitleTextOutline | string;
 }
 
 /**

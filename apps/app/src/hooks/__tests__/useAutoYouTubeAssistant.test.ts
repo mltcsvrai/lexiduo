@@ -58,7 +58,7 @@ describe('useAutoYouTubeAssistant hook & processDetectedVideo', () => {
       lastProcRef
     );
     expect(firstResult).toBe(true);
-    expect(lastProcRef.current).toBe('Video A::vidA');
+    expect(lastProcRef.current).toBe('Video A::vidA::auto::tr');
 
     // Duplicate event should be ignored immediately
     const secondResult = await processDetectedVideo(
@@ -67,6 +67,16 @@ describe('useAutoYouTubeAssistant hook & processDetectedVideo', () => {
       lastProcRef
     );
     expect(secondResult).toBe(false);
+
+    // Language change allows re-fetching the same video
+    const langChangeResult = await processDetectedVideo(
+      { title: 'Video A', videoId: 'vidA' },
+      activeReqRef,
+      lastProcRef,
+      { sourceLang: 'en', targetLang: 'de' }
+    );
+    expect(langChangeResult).toBe(true);
+    expect(lastProcRef.current).toBe('Video A::vidA::en::de');
   });
 
   it('discards zombie fastCues and final cues from an earlier video when a new video is detected', async () => {
@@ -147,7 +157,7 @@ describe('useAutoYouTubeAssistant hook & processDetectedVideo', () => {
     expect(clearSpy).toHaveBeenCalled();
     expect(aiFallbackSpy).toHaveBeenCalledWith(true);
     // Key must NOT be cleared on failure (preventing endless retries on player buffer)
-    expect(lastProcRef.current).toBe('Failing Video::fail1');
+    expect(lastProcRef.current).toBe('Failing Video::fail1::auto::tr');
 
     // Repeated event for same failing video is safely rejected
     const repeatResult = await processDetectedVideo(
@@ -175,7 +185,7 @@ describe('useAutoYouTubeAssistant hook & processDetectedVideo', () => {
     expect(result).toBe(false);
     expect(clearSpy).toHaveBeenCalled();
     expect(aiFallbackSpy).toHaveBeenCalledWith(true);
-    expect(lastProcRef.current).toBe('Mysterious Video Without ID::');
+    expect(lastProcRef.current).toBe('Mysterious Video Without ID::::auto::tr');
   });
 
   it('calls clearFloatingCues immediately when a new video is detected before fetching subtitles', async () => {

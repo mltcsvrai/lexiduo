@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/mltcsvrai/lexiduo/releases/latest"><img src="https://img.shields.io/github/v/release/mltcsvrai/lexiduo?color=blue&label=Release" alt="Latest Release"></a>
   <a href="https://github.com/mltcsvrai/lexiduo/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg" alt="License: GPL v3"></a>
-  <a href="https://github.com/mltcsvrai/lexiduo/releases/download/v0.0.3/app-release.apk"><img src="https://img.shields.io/badge/APK%20Size-27.2%20MB-success.svg" alt="APK Size: 27.2 MB"></a>
+  <a href="https://github.com/mltcsvrai/lexiduo/releases/download/v0.0.4/app-release.apk"><img src="https://img.shields.io/badge/APK%20Size-31.2%20MB-success.svg" alt="APK Size: 31.2 MB"></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-NDK%20ARM64-DEA584.svg?logo=rust&logoColor=white" alt="Rust NDK"></a>
   <a href="https://capacitorjs.com"><img src="https://img.shields.io/badge/Capacitor-8-119EFF.svg?logo=capacitor&logoColor=white" alt="Capacitor"></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/React-19-61DAFB.svg?logo=react&logoColor=white" alt="React 19"></a>
@@ -21,7 +21,7 @@
 
 <p align="center">
   <a href="https://github.com/mltcsvrai/lexiduo/releases/latest">
-    <img src="https://img.shields.io/badge/Download-Lexiduo%20APK%20(Release%20v0.0.3)-success?style=for-the-badge&logo=android" alt="Download Release APK" />
+    <img src="https://img.shields.io/badge/Download-Lexiduo%20APK%20(Release%20v0.0.4)-success?style=for-the-badge&logo=android" alt="Download Release APK" />
   </a>
 </p>
 

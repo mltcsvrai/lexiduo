@@ -7,6 +7,7 @@ import { useAppStore } from '../store/useAppStore';
 export interface YouTubePlayerHandle {
   toggleFullscreen: () => void;
   seekTo: (seconds: number) => void;
+  pauseVideo: () => void;
 }
 
 interface YouTubePlayerProps {
@@ -123,6 +124,15 @@ export const YouTubePlayer = forwardRef<YouTubePlayerHandle, YouTubePlayerProps>
     seekTo: (seconds: number) => {
       if (playerRef.current && playerRef.current.seekTo) {
         playerRef.current.seekTo(seconds, true);
+      }
+    },
+    pauseVideo: () => {
+      try {
+        if (playerRef.current && playerRef.current.pauseVideo) {
+          playerRef.current.pauseVideo();
+        }
+      } catch (err) {
+        console.warn('Manual pauseVideo failed:', err);
       }
     }
   }));

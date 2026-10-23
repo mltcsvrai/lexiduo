@@ -9,6 +9,7 @@ import {
   type WhisperTierKey
 } from './offlineTranslationEngine';
 import { isNativeWhisperAvailable, transcribeNativeAudio, loadNativeWavAudio } from './nativeWhisperBridge';
+import { getLastCachedAudioPath, setLastCachedAudioPath } from './youtubeAudioService';
 
 export type WhisperStage = 
   | 'extracting'
@@ -38,6 +39,7 @@ export interface TranscriptionOptions {
   apiKey?: string;
   forceEngine?: 'whisper' | 'gemini';
   videoUri?: string;
+  audioPath?: string;
   onProgress?: (progress: WhisperProgress) => void;
   t?: (key: TranslationKey, params?: Record<string, string | number>) => string;
 }
@@ -61,7 +63,7 @@ export async function transcribeAudioBuffer(
 ): Promise<SubtitleCue[]> {
   const { sourceLang = 'auto', targetLang = 'tr', apiKey, forceEngine } = options;
   const sampleRate = 16000;
-  let totalDuration = audioData.length / sampleRate;
+  let totalDuration = (audioData as any)?.duration || (audioData.length / sampleRate);
 
   const taskId = 'whisper_transcription';
   const taskTitle = options.t ? options.t('transcribingWhisper') : 'Whisper AI Transkripsiyon';
@@ -70,7 +72,7 @@ export async function transcribeAudioBuffer(
     const onProgress = (p: WhisperProgress) => {
       options.onProgress?.(p);
       if (p.detail || typeof p.progress === 'number') {
-        updateBg(p.detail || 'Deşifre ediliyor...', p.progress);
+        updateBg(p.detail || (options.t ? options.t('transcribingWhisper') : 'Transcribing...'), p.progress);
       }
     };
 
@@ -87,8 +89,8 @@ export async function transcribeAudioBuffer(
 
   let nativeWavPath: string | undefined = undefined;
 
-  // Two-Tier Smart Hybrid: Route Large / Small (or direct video URI) to Native Whisper on Android
-  if (forceEngine !== 'gemini' && isNativeWhisperAvailable() && (activeTierId === 'large-v3-turbo' || activeTierId === 'small' || options.videoUri)) {
+  // Two-Tier Smart Hybrid: Route all tiers to Native Whisper on Android when available
+  if (forceEngine !== 'gemini' && isNativeWhisperAvailable()) {
     let cleanLang = (sourceLang || 'auto').replace(/^a\./, '').split('-')[0];
     if (!cleanLang || cleanLang === 'auto') {
       cleanLang = targetLang === 'tr' ? 'tr' : (typeof navigator !== 'undefined' && navigator.language ? navigator.language.slice(0, 2) : 'tr');
@@ -105,12 +107,15 @@ export async function transcribeAudioBuffer(
 
     try {
       let audioBase64: string | undefined = undefined;
-      if (!options.videoUri && audioData.length > 0) {
+      const targetAudioPath = options.audioPath || (audioData as any)?.audioPath || (audioData as any)?.cachedAudioPath || getLastCachedAudioPath();
+
+      if (!options.videoUri && !targetAudioPath && audioData.length > 0) {
         const wavBuffer = encodeWav(audioData, 16000);
         audioBase64 = arrayBufferToBase64(wavBuffer);
       }
 
       const nativeRes = await transcribeNativeAudio({
+        audioPath: targetAudioPath || undefined,
         videoUri: options.videoUri,
         audioBase64,
         modelTier: activeTierId,
@@ -136,9 +141,11 @@ export async function transcribeAudioBuffer(
 
       // Only accept native result if actual speech was recognized (not empty dummy cues)
       if (nativeRes?.cues && nativeRes.cues.length > 0 && nativeRes.cues.some(c => c.sourceText && c.sourceText.trim() !== '')) {
+        setLastCachedAudioPath(null);
         const effectiveDuration = totalDuration > 0 ? totalDuration : (nativeRes.durationMs / 1000);
         return processAndTranslateCues(nativeRes.cues, cleanLang, targetLang, effectiveDuration, onProgress, apiKey, options.t);
       } else if (nativeRes && Array.isArray(nativeRes.cues)) {
+        setLastCachedAudioPath(null);
         // Native completed successfully without error; audio has no speech (silence/music)
         onProgress({
           stage: 'ready',
@@ -155,6 +162,8 @@ export async function transcribeAudioBuffer(
       if (activeTierId === 'large-v3-turbo') {
         throw new Error((nativeErr as any)?.message || 'Whisper Large v3 Turbo execution error');
       }
+    } finally {
+      setLastCachedAudioPath(null);
     }
   }
 

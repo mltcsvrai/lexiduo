@@ -5,8 +5,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
+
+import androidx.core.app.NotificationManagerCompat;
 
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -87,11 +90,23 @@ public class FloatingSubtitlePlugin extends Plugin {
             accessibilityGranted = true;
         }
 
+        // Check POST_NOTIFICATIONS permission (Android 13+ / API 33+)
+        boolean postNotificationsGranted = Build.VERSION.SDK_INT < 33 || NotificationManagerCompat.from(ctx).areNotificationsEnabled();
+
+        // Check Battery Optimization status
+        boolean batteryOptimizationIgnored = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PowerManager pm = (PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+            batteryOptimizationIgnored = pm != null && pm.isIgnoringBatteryOptimizations(ctx.getPackageName());
+        }
+
         JSObject ret = new JSObject();
         ret.put("overlay", overlayGranted);
         ret.put("notification", notificationGranted);
         ret.put("accessibility", accessibilityGranted);
-        ret.put("allGranted", overlayGranted && notificationGranted && accessibilityGranted);
+        ret.put("postNotifications", postNotificationsGranted);
+        ret.put("batteryOptimization", batteryOptimizationIgnored);
+        ret.put("allGranted", overlayGranted && notificationGranted && accessibilityGranted && postNotificationsGranted && batteryOptimizationIgnored);
         call.resolve(ret);
     }
 
@@ -142,6 +157,60 @@ public class FloatingSubtitlePlugin extends Plugin {
         } catch (Exception e) {
             call.reject("Cannot open accessibility settings: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        try {
+            Context ctx = getContext();
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + ctx.getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(intent);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Cannot open app settings: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void requestBatteryOptimization(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Context ctx = getContext();
+            try {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + ctx.getPackageName()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(intent);
+            } catch (Exception e) {
+                try {
+                    Intent fallback = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                    fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    ctx.startActivity(fallback);
+                } catch (Exception ex) {
+                    call.reject("Cannot open battery optimization settings: " + ex.getMessage());
+                    return;
+                }
+            }
+        }
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void requestNotificationPermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 33) {
+            Context ctx = getContext();
+            try {
+                Intent intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+                intent.putExtra(Settings.EXTRA_APP_PACKAGE, ctx.getPackageName());
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(intent);
+            } catch (Exception e) {
+                openAppSettings(call);
+                return;
+            }
+        }
+        call.resolve();
     }
 
     @PluginMethod
@@ -335,7 +404,15 @@ public class FloatingSubtitlePlugin extends Plugin {
         Double fontSize = call.getDouble("fontSize");
         Boolean showSubtitleBg = call.getBoolean("showSubtitleBg", true);
         String bgWidthMode = call.getString("bgWidthMode", "dynamic");
-        FloatingOverlayService.updateStyle(sourceColor, targetColor, bgColor, bgOpacity, fontSize, showSubtitleBg, bgWidthMode);
+        String subtitleMode = call.getString("subtitleMode", "DUAL");
+        String fontFamily = call.getString("fontFamily", "sans");
+        String fontWeight = call.getString("fontWeight", "normal");
+        String textOutline = call.getString("textOutline", "none");
+        FloatingOverlayService.updateStyle(
+                sourceColor, targetColor, bgColor, bgOpacity, fontSize,
+                showSubtitleBg, bgWidthMode, subtitleMode,
+                fontFamily, fontWeight, textOutline
+        );
         JSObject ret = new JSObject();
         ret.put("updated", true);
         call.resolve(ret);

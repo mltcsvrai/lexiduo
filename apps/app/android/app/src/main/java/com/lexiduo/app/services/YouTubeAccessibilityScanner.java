@@ -7,6 +7,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -14,11 +15,13 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Accessibility scanner that inspects the YouTube UI in real-time using a 4-layer
- * detection strategy to freeze/resume subtitles during ad breaks.
+ * detection strategy to freeze/resume subtitles during ad breaks, extract current
+ * playback timestamps (YouTube v19+ & Shorts), and maintain smooth 100ms extrapolation.
  */
 public class YouTubeAccessibilityScanner extends AccessibilityService {
     private static final String TAG = "YTAccessibilityScanner";
@@ -27,6 +30,7 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
     private static final int MAX_DEPTH = 15;
     private static final int MAX_NODES = 250;
     private static final long UNFREEZE_DEBOUNCE_MS = 600L;
+    private static final long HEARTBEAT_INTERVAL_MS = 100L;
 
     // Layer 1: Resource ID Whitelist for YouTube Ads
     private static final Set<String> AD_RESOURCE_IDS = new HashSet<>(Arrays.asList(
@@ -41,6 +45,19 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
             "com.google.android.youtube:id/ad_duration"
     ));
 
+    // YouTube v19+ & Shorts Time Node IDs
+    private static final Set<String> TIME_RESOURCE_IDS = new HashSet<>(Arrays.asList(
+            "com.google.android.youtube:id/time_current",
+            "com.google.android.youtube:id/player_time_badge",
+            "com.google.android.youtube:id/inline_time_bar",
+            "com.google.android.youtube:id/current_time",
+            "com.google.android.youtube:id/time_text",
+            "com.google.android.youtube:id/duration_view",
+            "com.google.android.youtube:id/reel_player_progress_time",
+            "com.google.android.youtube:id/shorts_player_time",
+            "com.google.android.youtube:id/progress_bar"
+    ));
+
     // Layer 2: Regex Patterns for Text & Content Description
     private static final Pattern PATTERN_AD_HEADER =
             Pattern.compile("^(?i)(reklam|ad|advertisement|sponsored|sponsorlu)(\\s*([·•\\-:]|\\d+).*|)$");
@@ -48,6 +65,10 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
             Pattern.compile("(?i)(reklamı atla|reklamı geç|skip ad|skip ads|reklam bitince oynatılacak)");
     private static final Pattern PATTERN_AD_COUNTDOWN =
             Pattern.compile("(?i)(reklam|ad)\\s*(\\d+/\\d+|\\d+\\s*s|\\d+:\\d+)");
+
+    // Time Regex: captures (?:\d{1,2}:)?\d{1,2}:\d{2} for mm:ss and hh:mm:ss formats
+    private static final Pattern PATTERN_TIME =
+            Pattern.compile("(?<!\\d)(?:(?:(\\d{1,2}):)?(\\d{1,2}):(\\d{2}))(?!\\d)");
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private HandlerThread scannerThread;
@@ -59,6 +80,27 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
     private static final long TITLE_DEBOUNCE_MS = 400L;
     private String lastDetectedTitle = null;
     private Runnable pendingTitleDebounceRunnable = null;
+
+    // Heartbeat extrapolation state
+    private volatile long lastDetectedPositionMs = -1L;
+    private volatile long lastPositionDetectClockMs = 0L;
+    private volatile boolean isVideoPlaying = true;
+    private volatile boolean isHeartbeatRunning = false;
+
+    private final Runnable heartbeatRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (!isHeartbeatRunning) return;
+            if (!isAdActive && isVideoPlaying && lastDetectedPositionMs >= 0) {
+                long elapsed = SystemClock.elapsedRealtime() - lastPositionDetectClockMs;
+                long extrapolatedTime = lastDetectedPositionMs + elapsed;
+                FloatingOverlayService.updatePlaybackState(true, extrapolatedTime, 1.0f);
+            }
+            if (isHeartbeatRunning && backgroundHandler != null) {
+                backgroundHandler.postDelayed(this, HEARTBEAT_INTERVAL_MS);
+            }
+        }
+    };
 
     @Override
     protected void onServiceConnected() {
@@ -104,11 +146,13 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
     @Override
     public void onInterrupt() {
         Log.w(TAG, "YouTubeAccessibilityScanner interrupted.");
+        stopHeartbeat();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        stopHeartbeat();
         if (backgroundHandler != null) {
             backgroundHandler.removeCallbacksAndMessages(null);
         }
@@ -138,17 +182,61 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
         try {
             int[] nodeCount = new int[]{0};
             String[] detectedTitle = new String[]{null};
-            boolean adDetected = scanNodeHierarchy(rootNode, 0, nodeCount, detectedTitle);
+            long[] detectedTime = new long[]{-1L};
+            Boolean[] detectedPlayState = new Boolean[]{null};
+
+            boolean adDetected = scanNodeHierarchy(rootNode, 0, nodeCount, detectedTitle, detectedTime, detectedPlayState);
             mainHandler.post(() -> {
                 updateAdState(adDetected);
-                if (!adDetected && detectedTitle[0] != null) {
-                    handleDetectedTitle(detectedTitle[0]);
+                if (!adDetected) {
+                    if (detectedTitle[0] != null) {
+                        handleDetectedTitle(detectedTitle[0]);
+                    }
+                    if (detectedTime[0] >= 0 || detectedPlayState[0] != null) {
+                        onPlaybackTimeDetected(detectedTime[0], detectedPlayState[0]);
+                    }
                 }
             });
         } finally {
             if (Build.VERSION.SDK_INT < 34) {
                 rootNode.recycle();
             }
+        }
+    }
+
+    private void startHeartbeat() {
+        // Disabled: FloatingOverlayService maintains its own high-resolution 100ms interpolation.
+        // Redundant heartbeats with coarse accessibility seconds clobbered MediaSession timestamps.
+    }
+
+    private void stopHeartbeat() {
+        isHeartbeatRunning = false;
+        if (backgroundHandler != null) {
+            backgroundHandler.removeCallbacks(heartbeatRunnable);
+        }
+    }
+
+    private void onPlaybackTimeDetected(long timeMs, Boolean isPlayingState) {
+        if (timeMs < 0 && isPlayingState == null) return;
+        long now = SystemClock.elapsedRealtime();
+
+        if (isPlayingState != null) {
+            isVideoPlaying = isPlayingState;
+        } else if (lastDetectedPositionMs >= 0 && timeMs > lastDetectedPositionMs) {
+            isVideoPlaying = true;
+        }
+
+        if (timeMs >= 0) {
+            lastDetectedPositionMs = timeMs;
+            lastPositionDetectClockMs = now;
+        }
+
+        FloatingOverlayService.updatePlaybackState(isVideoPlaying, lastDetectedPositionMs, 1.0f);
+
+        if (isVideoPlaying && !isAdActive && lastDetectedPositionMs >= 0) {
+            startHeartbeat();
+        } else {
+            stopHeartbeat();
         }
     }
 
@@ -194,6 +282,69 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
         }
     }
 
+    private void inspectForPlaybackTime(AccessibilityNodeInfo node, String viewId, long[] detectedTime) {
+        if (detectedTime[0] >= 0 || viewId == null || isAdActive) return;
+        String idLower = viewId.toLowerCase();
+
+        boolean isTimeNode = TIME_RESOURCE_IDS.contains(viewId)
+                || idLower.contains("time_current")
+                || idLower.contains("player_time_badge")
+                || idLower.contains("inline_time_bar")
+                || idLower.contains("current_time")
+                || idLower.contains("reel_player_progress_time")
+                || idLower.contains("shorts_player_time")
+                || idLower.contains("time_text")
+                || (idLower.contains("time") && !idLower.contains("title") && !idLower.contains("comment"));
+
+        if (isTimeNode) {
+            CharSequence text = node.getText();
+            CharSequence desc = node.getContentDescription();
+            long parsed = parseTimeToMs(text);
+            if (parsed < 0) {
+                parsed = parseTimeToMs(desc);
+            }
+            if (parsed >= 0 && verifyGeometry(node)) {
+                detectedTime[0] = parsed;
+            }
+        }
+    }
+
+    private void inspectForPlayPause(AccessibilityNodeInfo node, String viewId, Boolean[] detectedPlayState) {
+        if (detectedPlayState[0] != null || viewId == null) return;
+        String idLower = viewId.toLowerCase();
+        if (idLower.contains("play_pause") || idLower.contains("play_button") || idLower.contains("pause_button")) {
+            CharSequence desc = node.getContentDescription();
+            CharSequence text = node.getText();
+            String str = (desc != null ? desc.toString() : (text != null ? text.toString() : "")).toLowerCase();
+            if (str.contains("pause") || str.contains("duraklat")) {
+                detectedPlayState[0] = true; // Button says "Pause", meaning media is currently PLAYING
+            } else if (str.contains("play") || str.contains("oynat")) {
+                detectedPlayState[0] = false; // Button says "Play", meaning media is currently PAUSED
+            }
+        }
+    }
+
+    private long parseTimeToMs(CharSequence sequence) {
+        if (sequence == null) return -1L;
+        String str = sequence.toString().trim();
+        if (str.isEmpty() || str.length() > 30) return -1L;
+
+        Matcher matcher = PATTERN_TIME.matcher(str);
+        if (matcher.find()) {
+            try {
+                String hours = matcher.group(1);
+                String minutes = matcher.group(2);
+                String seconds = matcher.group(3);
+                if (minutes == null || seconds == null) return -1L;
+                long h = (hours != null && !hours.isEmpty()) ? Long.parseLong(hours) : 0L;
+                long m = Long.parseLong(minutes);
+                long s = Long.parseLong(seconds);
+                return ((h * 3600L) + (m * 60L) + s) * 1000L;
+            } catch (NumberFormatException ignored) {}
+        }
+        return -1L;
+    }
+
     private boolean isGenericTitle(String str) {
         String lower = str.toLowerCase();
         return lower.equals("youtube") || lower.equals("home") || lower.equals("subscriptions")
@@ -208,7 +359,14 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
      * 3. Geometric bounds
      * 4. Structural sanity & recursion limits
      */
-    private boolean scanNodeHierarchy(AccessibilityNodeInfo node, int depth, int[] nodeCount, String[] detectedTitle) {
+    private boolean scanNodeHierarchy(
+            AccessibilityNodeInfo node,
+            int depth,
+            int[] nodeCount,
+            String[] detectedTitle,
+            long[] detectedTime,
+            Boolean[] detectedPlayState
+    ) {
         if (node == null || depth > MAX_DEPTH || nodeCount[0] > MAX_NODES) {
             return false;
         }
@@ -219,6 +377,16 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
         // Inspect visible node for video title (under player in portrait mode)
         if (detectedTitle != null && detectedTitle[0] == null) {
             inspectForVideoTitle(node, viewId, detectedTitle);
+        }
+
+        // Inspect node for current playback time (YouTube v19+ & Shorts)
+        if (detectedTime != null && detectedTime[0] < 0) {
+            inspectForPlaybackTime(node, viewId, detectedTime);
+        }
+
+        // Inspect node for play/pause state
+        if (detectedPlayState != null && detectedPlayState[0] == null) {
+            inspectForPlayPause(node, viewId, detectedPlayState);
         }
 
         // Check Layer 1: Resource ID
@@ -256,7 +424,7 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
             AccessibilityNodeInfo child = node.getChild(i);
             if (child != null) {
                 try {
-                    if (scanNodeHierarchy(child, depth + 1, nodeCount, detectedTitle)) {
+                    if (scanNodeHierarchy(child, depth + 1, nodeCount, detectedTitle, detectedTime, detectedPlayState)) {
                         return true;
                     }
                 } finally {
@@ -312,6 +480,7 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
 
     private void updateAdState(boolean adDetected) {
         if (adDetected) {
+            stopHeartbeat();
             if (pendingUnfreezeRunnable != null) {
                 mainHandler.removeCallbacks(pendingUnfreezeRunnable);
                 pendingUnfreezeRunnable = null;
@@ -330,6 +499,10 @@ public class YouTubeAccessibilityScanner extends AccessibilityService {
                     pendingUnfreezeRunnable = null;
                     Log.i(TAG, "Ad ended -> resuming subtitle synchronization");
                     FloatingOverlayService.setAdActive(false);
+                    if (isVideoPlaying && lastDetectedPositionMs >= 0) {
+                        lastPositionDetectClockMs = SystemClock.elapsedRealtime();
+                        startHeartbeat();
+                    }
                 };
                 mainHandler.postDelayed(pendingUnfreezeRunnable, UNFREEZE_DEBOUNCE_MS);
             }

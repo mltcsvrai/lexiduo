@@ -9,6 +9,7 @@ import { batchTranslateCues, resolveCuesForLanguage, type SubtitleExportMode } f
 import { muxSubtitlesIntoMkv } from './mkvMuxerService';
 import { muxSubtitlesIntoMp4, type SubtitleTrackExport } from './mp4MuxerService';
 import { downloadBlobAsFile, blobToBase64 } from './blobDownloadHelper';
+import { resolveYouTubeStreams, type VideoStreamFormat } from './youtubeStreamResolver';
 
 export { muxSubtitlesIntoMkv, muxSubtitlesIntoMp4, downloadBlobAsFile, blobToBase64 };
 export type { SubtitleTrackExport };
@@ -27,7 +28,8 @@ const getWorkerVideoConfig = () => {
   const token = metaEnv?.VITE_WORKER_APP_TOKEN || '';
   return { url: base ? `${base.replace(/\/+$/, '')}/api/video` : '', token };
 };
-const FALLBACK_INNERTUBE_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
+const MAX_STREAM_CHUNK_BATCH_BYTES = 32 * 1024 * 1024; // 32 MB chunk consolidation to protect V8 heap
+const MAX_SAFE_HEAP_STREAM_BYTES = 300 * 1024 * 1024; // 300 MB threshold for memory protection warnings
 
 async function consumeStreamResponse(
   response: Response,
@@ -45,8 +47,11 @@ async function consumeStreamResponse(
   }
 
   const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
+  const blobParts: BlobPart[] = [];
+  let currentBatch: Uint8Array[] = [];
+  let currentBatchBytes = 0;
   let loaded = 0;
+  let hasLoggedLargeStream = false;
 
   try {
     while (true) {
@@ -57,8 +62,22 @@ async function consumeStreamResponse(
       const { done, value } = await reader.read();
       if (done) break;
       if (value) {
-        chunks.push(value);
+        currentBatch.push(value);
+        currentBatchBytes += value.length;
         loaded += value.length;
+
+        // Consolidate every 32 MB to free underlying typed arrays from V8 GC root
+        if (currentBatchBytes >= MAX_STREAM_CHUNK_BATCH_BYTES) {
+          blobParts.push(new Blob(currentBatch as BlobPart[]));
+          currentBatch = [];
+          currentBatchBytes = 0;
+        }
+
+        if (!hasLoggedLargeStream && loaded >= MAX_SAFE_HEAP_STREAM_BYTES) {
+          hasLoggedLargeStream = true;
+          console.info(`[videoRemuxService] Stream reached ${(loaded / (1024 * 1024)).toFixed(0)} MB, streaming via memory-protected Blob batches.`);
+        }
+
         onProgress?.(total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 50, loaded, total);
       }
     }
@@ -66,8 +85,13 @@ async function consumeStreamResponse(
     reader.releaseLock?.();
   }
 
+  if (currentBatch.length > 0) {
+    blobParts.push(new Blob(currentBatch as BlobPart[]));
+    currentBatch = [];
+  }
+
   onProgress?.(100, loaded, total || loaded);
-  return new Blob(chunks as BlobPart[], { type: contentType });
+  return new Blob(blobParts, { type: contentType });
 }
 
 async function fetchCdnStreamBlob(
@@ -77,33 +101,64 @@ async function fetchCdnStreamBlob(
 ): Promise<Blob> {
   const isNative = typeof window !== 'undefined' && typeof (window as any).Capacitor !== 'undefined' && Boolean((window as any).Capacitor.isNativePlatform?.());
   if (isNative) {
-    // 1. On Native Android, attempt Filesystem.downloadFile to Cache to bypass 1MB bridge IPC limits
+    // 1. On Native Android, stream directly to Cache using Filesystem.downloadFile to bypass WebView heap
     let progressListener: any = null;
+    const tempFilename = `temp_dl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.mp4`;
+    let cleanupFileNeeded = false;
     try {
       const { Filesystem, Directory } = await import('@capacitor/filesystem');
-      const tempFilename = `temp_dl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}.mp4`;
-      progressListener = await Filesystem.addListener('progress', (p: any) => {
-        const totalBytes = p.contentLength || 0;
-        const loadedBytes = p.bytes || 0;
-        const pct = totalBytes > 0 ? Math.min(100, Math.round((loadedBytes / totalBytes) * 100)) : 50;
-        onProgress?.(pct, loadedBytes, totalBytes);
-      });
-      const dlRes = await Filesystem.downloadFile({
-        url: streamUrl,
-        path: tempFilename,
-        directory: Directory.Cache,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14)' },
-        progress: true
-      });
-      await progressListener?.remove();
-      progressListener = null;
+      cleanupFileNeeded = true;
 
-      if (dlRes?.path) {
+      let downloadedPath = '';
+      try {
+        const { registerPlugin } = await import('@capacitor/core');
+        const MediaDownload = registerPlugin<any>('MediaDownload');
+        const fastRes = await MediaDownload.fastDownload({
+          url: streamUrl,
+          outputFileName: tempFilename
+        });
+        if (fastRes?.path) {
+          downloadedPath = fastRes.path;
+        }
+      } catch {
+        // Fallback to Filesystem.downloadFile if fastDownload is unavailable
+      }
+
+      if (!downloadedPath) {
+        progressListener = await Filesystem.addListener('progress', (p: any) => {
+          const totalBytes = p.contentLength || 0;
+          const loadedBytes = p.bytes || 0;
+          const pct = totalBytes > 0 ? Math.min(100, Math.round((loadedBytes / totalBytes) * 100)) : 50;
+          onProgress?.(pct, loadedBytes, totalBytes);
+        });
+        const dlRes = await Filesystem.downloadFile({
+          url: streamUrl,
+          path: tempFilename,
+          directory: Directory.Cache,
+          headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14)' },
+          progress: true
+        });
+        await progressListener?.remove();
+        progressListener = null;
+        downloadedPath = dlRes?.path || '';
+      }
+
+      if (downloadedPath) {
+        try {
+          const stat = await Filesystem.stat({ path: tempFilename, directory: Directory.Cache });
+          if (stat.size && stat.size > MAX_SAFE_HEAP_STREAM_BYTES) {
+            console.info(`[videoRemuxService] Native video size is ${(stat.size / (1024 * 1024)).toFixed(1)} MB. Loading stream with batched memory protection.`);
+          }
+        } catch {
+          // ignore stat check error
+        }
+
         const { Capacitor } = await import('@capacitor/core');
-        const localSrc = Capacitor.convertFileSrc(dlRes.path);
+        const localSrc = Capacitor.convertFileSrc(downloadedPath);
         const localRes = await fetch(localSrc);
-        const blob = await localRes.blob();
+        const blob = await consumeStreamResponse(localRes, onProgress, signal);
         Filesystem.deleteFile({ path: tempFilename, directory: Directory.Cache }).catch(() => {});
+        cleanupFileNeeded = false;
         onProgress?.(100, blob.size, blob.size);
         return blob;
       }
@@ -113,9 +168,13 @@ async function fetchCdnStreamBlob(
       if (progressListener) {
         try {
           await progressListener.remove();
-        } catch {
-          // ignore cleanup error
-        }
+        } catch {}
+      }
+      if (cleanupFileNeeded) {
+        try {
+          const { Filesystem, Directory } = await import('@capacitor/filesystem');
+          Filesystem.deleteFile({ path: tempFilename, directory: Directory.Cache }).catch(() => {});
+        } catch {}
       }
     }
 
@@ -186,41 +245,127 @@ export async function fetchYouTubeVideoStream(
     }
   }
 
-  // 3. On Native Android (or last-ditch browser): Attempt on-device InnerTube extraction
+  // 3. Direct client stream resolution via VISIONOS/IOS InnerTube & safe opcode decipher
   try {
-    let apiKey = FALLBACK_INNERTUBE_KEY;
-    try {
-      const watchRes = await smartFetch(`https://www.youtube.com/watch?v=${videoId}`, { headers: { 'User-Agent': 'Mozilla/5.0' } }, 10000);
-      const html = await watchRes.text();
-      const extracted = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/)?.[1];
-      if (extracted) apiKey = extracted;
-    } catch (watchErr) {
-      console.warn('Watch page extraction warning, using fallback InnerTube API key:', watchErr);
+    const formats: VideoStreamFormat[] = await resolveYouTubeStreams(videoId, signal);
+
+    // 1080p dual-stream (video + audio) handling with hardware MediaMuxer
+    if (resolution === '1080p') {
+      const video1080 = formats.find(f => f.hasVideo && (f.itag === 299 || f.itag === 137 || f.itag === 399 || f.height === 1080));
+      const audioFormat = formats.find(f => f.hasAudio && (f.itag === 140 || f.mimeType?.includes('audio/mp4'))) ||
+        formats.find(f => f.hasAudio);
+
+      if (video1080?.url) {
+        if (isNative && audioFormat?.url) {
+          let tempVideoPath = '';
+          let tempAudioPath = '';
+          const now = Date.now();
+          const tempVideoName = `temp_vid_1080p_${now}.mp4`;
+          const tempAudioName = `temp_aud_1080p_${now}.mp4`;
+          const outputFileName = `muxed_1080p_${now}.mp4`;
+
+          try {
+            const { Filesystem, Directory } = await import('@capacitor/filesystem');
+            const { Capacitor, registerPlugin } = await import('@capacitor/core');
+            const MediaDownload = registerPlugin<any>('MediaDownload');
+
+            onProgress?.(10, 0, 100);
+            let dlVideo: any = null;
+            try {
+              dlVideo = await MediaDownload.fastDownload({
+                url: video1080.url,
+                outputFileName: tempVideoName
+              });
+            } catch {
+              dlVideo = await Filesystem.downloadFile({
+                url: video1080.url,
+                path: tempVideoName,
+                directory: Directory.Cache,
+                headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14)' }
+              });
+            }
+            tempVideoPath = dlVideo?.path || '';
+            if (!tempVideoPath) {
+              const u = await Filesystem.getUri({ directory: Directory.Cache, path: tempVideoName });
+              tempVideoPath = u.uri.replace(/^file:\/\//, '');
+            }
+
+            onProgress?.(55, 55, 100);
+            let dlAudio: any = null;
+            try {
+              dlAudio = await MediaDownload.fastDownload({
+                url: audioFormat.url,
+                outputFileName: tempAudioName
+              });
+            } catch {
+              dlAudio = await Filesystem.downloadFile({
+                url: audioFormat.url,
+                path: tempAudioName,
+                directory: Directory.Cache,
+                headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14)' }
+              });
+            }
+            tempAudioPath = dlAudio?.path || '';
+            if (!tempAudioPath) {
+              const u = await Filesystem.getUri({ directory: Directory.Cache, path: tempAudioName });
+              tempAudioPath = u.uri.replace(/^file:\/\//, '');
+            }
+
+            onProgress?.(80, 80, 100);
+            const muxRes = await MediaDownload.muxVideoAndAudio({
+              videoPath: tempVideoPath,
+              audioPath: tempAudioPath,
+              outputFileName
+            });
+
+            const muxedPath = muxRes?.path || muxRes?.outputPath || muxRes?.filePath || '';
+            let finalSrc = muxedPath;
+            if (!finalSrc) {
+              const u = await Filesystem.getUri({ directory: Directory.Cache, path: outputFileName });
+              finalSrc = u.uri;
+            }
+
+            // Convert muxed file into webview-accessible URL and stream into Blob
+            const localSrc = Capacitor.convertFileSrc(finalSrc);
+            const localRes = await fetch(localSrc);
+            const blob = await consumeStreamResponse(localRes, onProgress, signal);
+
+            onProgress?.(100, blob.size, blob.size);
+            return blob;
+          } catch (muxErr) {
+            console.warn('[videoRemuxService] Native 1080p muxing failed, falling back to direct video stream:', muxErr);
+          } finally {
+            // Guarantee cleanup of temporary video, audio, and muxed files from cache
+            try {
+              const { Filesystem, Directory } = await import('@capacitor/filesystem');
+              Filesystem.deleteFile({ path: tempVideoName, directory: Directory.Cache }).catch(() => {});
+              Filesystem.deleteFile({ path: tempAudioName, directory: Directory.Cache }).catch(() => {});
+              Filesystem.deleteFile({ path: outputFileName, directory: Directory.Cache }).catch(() => {});
+            } catch {}
+          }
+        }
+
+        // Web or fallback: download 1080p video stream directly via fetchCdnStreamBlob
+        return await fetchCdnStreamBlob(video1080.url, onProgress, signal);
+      }
     }
 
-    const playerRes = await smartFetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Linux; Android 14)' },
-      body: JSON.stringify({ context: { client: { clientName: 'ANDROID', clientVersion: '20.10.38', androidSdkVersion: 34 } }, videoId })
-    }, 10000);
-
-    const playerData = await playerRes.json();
-    const formats = [...(playerData?.streamingData?.formats || []), ...(playerData?.streamingData?.adaptiveFormats || [])]
-      .filter((f: any) => f && typeof f.url === 'string' && f.url.startsWith('http'));
-
-    // Prioritize progressive formats with audio+video (itag 22: 720p, itag 18: 360p)
-    let sel: any = null;
+    // 360p and 720p resolution selection:
+    // Prioritize unthrottled, combined audio+video progressive formats (itag 18 / itag 22)
+    let sel: VideoStreamFormat | undefined;
     if (resolution === '360p') {
-      sel = formats.find((f: any) => f.itag === 18) || formats.find((f: any) => f.height <= 360 && f.mimeType?.includes('video'));
-    } else if (resolution === '1080p') {
-      sel = formats.find((f: any) => f.height === 1080) || formats.find((f: any) => f.itag === 22) || formats.find((f: any) => f.itag === 18);
+      sel = formats.find(f => f.hasVideo && f.hasAudio && f.itag === 18) ||
+        formats.find(f => f.hasVideo && f.itag === 18) ||
+        formats.find(f => f.hasVideo && (f.height !== undefined && f.height <= 360));
     } else {
-      // 720p default: prioritize itag 22 (720p progressive), fallback to itag 18 (360p audio+video), then adaptive 720
-      sel = formats.find((f: any) => f.itag === 22) || formats.find((f: any) => f.itag === 18) || formats.find((f: any) => f.height === 720);
+      // 720p: prioritize itag 22 (720p progressive), fallback to itag 18 (360p audio+video), then adaptive 720
+      sel = formats.find(f => f.hasVideo && f.hasAudio && f.itag === 22) ||
+        formats.find(f => f.hasVideo && f.hasAudio && f.itag === 18) ||
+        formats.find(f => f.hasVideo && (f.itag === 22 || f.height === 720));
     }
 
     if (!sel) {
-      sel = formats.find((f: any) => f.itag === 18) || formats.find((f: any) => f.mimeType?.includes('video/mp4')) || formats[0];
+      sel = formats.find(f => f.hasVideo && f.hasAudio) || formats.find(f => f.hasVideo) || formats[0];
     }
 
     if (sel?.url) {
@@ -228,7 +373,7 @@ export async function fetchYouTubeVideoStream(
     }
   } catch (clientErr: any) {
     if (clientErr?.name === 'AbortError' || signal?.aborted) throw clientErr;
-    console.warn('Direct InnerTube video extraction failed, trying remote worker fallback:', clientErr);
+    console.warn('Direct stream resolution failed, trying remote worker fallback:', clientErr);
   }
 
   // 4. Safe ultimate fallback to Cloudflare Worker (if configured)

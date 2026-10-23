@@ -55,6 +55,9 @@ export {
   requestOverlayPermission,
   requestNotificationAccess,
   requestAccessibility,
+  openAppSettings,
+  requestBatteryOptimization,
+  requestNotificationPermission,
   startFloatingOverlay,
   stopFloatingOverlay,
   loadFloatingCues,
@@ -103,6 +106,13 @@ export {
   type SubtitleTrackExport,
   type VideoExportParams
 } from './services/videoRemuxService';
+export {
+  resolveYouTubeStreams,
+  fetchVisitorData,
+  applyCipherOperations,
+  type VideoStreamFormat,
+  type CipherOp
+} from './services/youtubeStreamResolver';
 
 // Store
 export { useAppStore } from './store/useAppStore';

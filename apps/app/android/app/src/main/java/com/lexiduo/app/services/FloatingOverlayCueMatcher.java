@@ -9,6 +9,8 @@ import java.util.List;
  * overlap tolerance, and natural pause hold support.
  */
 public final class FloatingOverlayCueMatcher {
+    public static final long EARLY_LEAD_MS = 100L;
+
     private FloatingOverlayCueMatcher() {}
 
     @Nullable
@@ -19,12 +21,13 @@ public final class FloatingOverlayCueMatcher {
         int low = 0;
         int high = size - 1;
         int floorIndex = -1;
+        long effectiveSearchTime = timeMs + EARLY_LEAD_MS;
 
-        // Find the cue with the latest startMs <= timeMs
+        // Find the cue with the latest startMs <= effectiveSearchTime
         while (low <= high) {
             int mid = (low + high) >>> 1;
             SubtitleCue cue = cuesList.get(mid);
-            if (cue.startMs <= timeMs) {
+            if (cue.startMs <= effectiveSearchTime) {
                 floorIndex = mid;
                 low = mid + 1;
             } else {
@@ -32,16 +35,18 @@ public final class FloatingOverlayCueMatcher {
             }
         }
 
-        // 1. Playback before first cue has started: no cue yet
+        // 1. Playback before first cue has reached early lead window: no cue yet
         if (floorIndex == -1) {
             return null;
         }
 
-        // 2. Active cue or natural pause hold persistence (up to 400ms after cue end)
+        // 2. Active cue: taking 100ms early lead-in into account
         SubtitleCue floorCue = cuesList.get(floorIndex);
-        if (floorCue.isActive(timeMs)) return floorCue;
+        if (timeMs + EARLY_LEAD_MS >= floorCue.startMs && timeMs <= floorCue.endMs) {
+            return floorCue;
+        }
 
-        boolean nextNotStarted = (floorIndex >= size - 1) || (timeMs < cuesList.get(floorIndex + 1).startMs);
+        boolean nextNotStarted = (floorIndex >= size - 1) || (effectiveSearchTime < cuesList.get(floorIndex + 1).startMs);
         if (nextNotStarted && timeMs <= floorCue.endMs + 400L) {
             return floorCue;
         }
@@ -50,7 +55,9 @@ public final class FloatingOverlayCueMatcher {
         int checkBack = Math.max(0, floorIndex - 5);
         for (int i = floorIndex - 1; i >= checkBack; i--) {
             SubtitleCue prev = cuesList.get(i);
-            if (prev.isActive(timeMs)) return prev;
+            if (timeMs + EARLY_LEAD_MS >= prev.startMs && timeMs <= prev.endMs) {
+                return prev;
+            }
         }
         return null;
     }

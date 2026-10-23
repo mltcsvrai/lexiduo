@@ -51,6 +51,8 @@ interface StudioHeroProps {
   statusText?: string;
   progressPercent?: number;
   onOpenPermissionGuide?: () => void;
+  onCancelProcessing?: () => void;
+  processingTierName?: string;
 }
 
 
@@ -89,7 +91,9 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
   whisperProgress = null,
   statusText = '',
   progressPercent = 0,
-  onOpenPermissionGuide
+  onOpenPermissionGuide,
+  onCancelProcessing,
+  processingTierName
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'youtube' | 'local'>('youtube');
@@ -576,6 +580,8 @@ export const StudioHero: React.FC<StudioHeroProps> = ({
           handleDeleteLocalItem={handleDeleteLocalItem}
           handleClearLocalHistory={handleClearLocalHistory}
           fileInputRef={fileInputRef}
+          onCancelProcessing={onCancelProcessing}
+          processingTierName={processingTierName}
         />
       )}
 

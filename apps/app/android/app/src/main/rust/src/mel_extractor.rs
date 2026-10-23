@@ -127,6 +127,13 @@ pub fn extract_mel_features(audio: &[f32], n_mels: usize) -> Vec<f32> {
     let copy_len = audio.len().min(TARGET_SAMPLES);
     padded[..copy_len].copy_from_slice(&audio[..copy_len]);
 
+    // Calculate active frames containing audio data to avoid redundant FFTs on zero padding
+    let active_frames = if copy_len > 0 {
+        ((copy_len + HOP_LENGTH - 1) / HOP_LENGTH).min(TARGET_FRAMES)
+    } else {
+        0
+    };
+
     // 2. Compute Power Spectrogram across 3000 frames: [NUM_FREQS][TARGET_FRAMES]
     // Layout: power_spec[k * TARGET_FRAMES + frame] for optimal vectorization stride
     let mut power_spec = vec![0.0f32; NUM_FREQS * TARGET_FRAMES];
@@ -134,7 +141,7 @@ pub fn extract_mel_features(audio: &[f32], n_mels: usize) -> Vec<f32> {
     let mut fft_out = r2c.make_output_vec();
     let mut scratch = r2c.make_scratch_vec();
 
-    for frame in 0..TARGET_FRAMES {
+    for frame in 0..active_frames {
         let offset = frame * HOP_LENGTH;
         let samples_available = (TARGET_SAMPLES - offset).min(N_FFT);
 
@@ -154,6 +161,7 @@ pub fn extract_mel_features(audio: &[f32], n_mels: usize) -> Vec<f32> {
             power_spec[k * TARGET_FRAMES + frame] = re * re + im * im;
         }
     }
+    // Tail frames (active_frames..TARGET_FRAMES) remain 0.0 without running FFTs
 
     // 3. Row-major multiplication of mel filters with power spectrogram: [n_mels][TARGET_FRAMES]
     let mut mel_spec = vec![0.0f32; n_mels * TARGET_FRAMES];

@@ -29,6 +29,8 @@ import {
   filterLangsNeedingTranslation,
   downloadSubtitleFile
 } from '../services/subtitleExportService';
+import { STORAGE_KEYS, getCompatItem, setCompatItem } from '../services/storageKeys';
+import { DownloadSuccessModal } from './DownloadSuccessModal';
 
 export interface DownloadSubtitlesModalProps {
   isOpen: boolean;
@@ -69,6 +71,8 @@ export const DownloadSubtitlesModal: React.FC<DownloadSubtitlesModalProps> = ({
   const [progress, setProgress] = useState<VideoDownloadProgress | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showFallbackAction, setShowFallbackAction] = useState(false);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [completedFileName, setCompletedFileName] = useState('');
   const abortControllerRef = useRef<AbortController | null>(null);
   const prevIsOpenRef = useRef(false);
 
@@ -77,6 +81,8 @@ export const DownloadSubtitlesModal: React.FC<DownloadSubtitlesModalProps> = ({
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
       setSelectedLangs([targetLang || 'tr']);
+      setIsSuccessModalOpen(false);
+      setCompletedFileName('');
     }
     prevIsOpenRef.current = isOpen;
   }, [isOpen, targetLang]);
@@ -113,6 +119,46 @@ export const DownloadSubtitlesModal: React.FC<DownloadSubtitlesModalProps> = ({
     }
     setIsDownloading(false);
     setProgress(null);
+  };
+
+  const handleDownloadCompleted = async (fileName: string) => {
+    setProgress({ stage: 'completed', percent: 100, detail: t('downloadCompleted') });
+    setCompletedFileName(fileName);
+    try {
+      const hideNotice = await getCompatItem<boolean>(
+        STORAGE_KEYS.HIDE_DOWNLOAD_LOCATION_NOTICE.primary,
+        STORAGE_KEYS.HIDE_DOWNLOAD_LOCATION_NOTICE.legacy
+      );
+      if (hideNotice) {
+        setTimeout(() => {
+          setIsDownloading(false);
+          onClose();
+        }, 1200);
+      } else {
+        setIsDownloading(false);
+        setIsSuccessModalOpen(true);
+      }
+    } catch {
+      setTimeout(() => {
+        setIsDownloading(false);
+        onClose();
+      }, 1200);
+    }
+  };
+
+  const handleDontShowAgain = async () => {
+    await setCompatItem(
+      STORAGE_KEYS.HIDE_DOWNLOAD_LOCATION_NOTICE.primary,
+      STORAGE_KEYS.HIDE_DOWNLOAD_LOCATION_NOTICE.legacy,
+      true
+    );
+    setIsSuccessModalOpen(false);
+    onClose();
+  };
+
+  const handleCloseSuccessModal = () => {
+    setIsSuccessModalOpen(false);
+    onClose();
   };
 
   const prepareEffectiveCues = async () => {
@@ -207,11 +253,10 @@ export const DownloadSubtitlesModal: React.FC<DownloadSubtitlesModalProps> = ({
         await downloadSubtitleFile(textContent, fileName);
       }
 
-      setProgress({ stage: 'completed', percent: 100, detail: t('downloadCompleted') });
-      setTimeout(() => {
-        setIsDownloading(false);
-        onClose();
-      }, 1200);
+      const summaryFileName = selectedLangs.length > 1 
+        ? `${baseName}_(${selectedLangs.length}_langs).${activeFormat}` 
+        : `${baseName}_[${selectedLangs[0] || 'sub'}].${activeFormat}`;
+      await handleDownloadCompleted(summaryFileName);
     } catch (err: any) {
       if (err?.name === 'AbortError' || controller.signal.aborted) {
         setIsDownloading(false);
@@ -308,11 +353,9 @@ export const DownloadSubtitlesModal: React.FC<DownloadSubtitlesModalProps> = ({
         signal: controller.signal,
       });
 
-      setProgress({ stage: 'completed', percent: 100, detail: t('downloadCompleted') });
-      setTimeout(() => {
-        setIsDownloading(false);
-        onClose();
-      }, 1500);
+      const baseTitle = (videoTitle || videoFile?.name || videoId || 'video').replace(/[/\\?%*:|"<>]/g, '_').trim();
+      const videoFileName = `${baseTitle}_subtitled.${container}`;
+      await handleDownloadCompleted(videoFileName);
     } catch (err: any) {
       if (err?.name === 'AbortError' || controller.signal.aborted) {
         setIsDownloading(false);
@@ -348,7 +391,8 @@ export const DownloadSubtitlesModal: React.FC<DownloadSubtitlesModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div 
         className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-3xl p-5 sm:p-6 shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-scale-in"
         onClick={(e) => e.stopPropagation()}
@@ -676,5 +720,13 @@ export const DownloadSubtitlesModal: React.FC<DownloadSubtitlesModalProps> = ({
         </div>
       </div>
     </div>
-  );
+
+    <DownloadSuccessModal
+      isOpen={isSuccessModalOpen}
+      onClose={handleCloseSuccessModal}
+      fileName={completedFileName}
+      onDontShowAgain={handleDontShowAgain}
+    />
+  </>
+);
 };

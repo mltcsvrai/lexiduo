@@ -48,6 +48,7 @@ public class NativeWhisperEngine {
 
     private final Context context;
     private final AtomicBoolean isCancelled = new AtomicBoolean(false);
+    private volatile WhisperCppEngine activeCppEngine = null;
     private final WhisperFeatureExtractor featureExtractor = new WhisperFeatureExtractor();
     private final WhisperTokenizer tokenizer = new WhisperTokenizer();
 
@@ -103,6 +104,12 @@ public class NativeWhisperEngine {
 
     public void cancel() {
         isCancelled.set(true);
+        WhisperCppEngine engine = activeCppEngine;
+        if (engine != null) {
+            try {
+                engine.cancel();
+            } catch (Throwable ignored) {}
+        }
     }
 
     public boolean isCancelled() {
@@ -130,10 +137,7 @@ public class NativeWhisperEngine {
         );
 
         try {
-            // 1. Ensure model sessions are loaded from disk
-            ensureModelLoaded(modelTier);
-
-            // 2. Read WAV header and calculate total samples and duration
+            // 1. Read WAV header and calculate total samples and duration
             long fileLength = wavFile.length();
             if (fileLength <= 44) {
                 return new TranscriptionResult(new ArrayList<>(), 0, modelTier);
@@ -146,10 +150,71 @@ public class NativeWhisperEngine {
                 return new TranscriptionResult(new ArrayList<>(), 0, modelTier);
             }
 
-            if (progressListener != null) {
-                progressListener.onProgress(10, "Ses dalgaları analiz ediliyor...", 0, 1, 0, totalDurationMs);
+            // 2. High-performance whisper.cpp (GGML C++ / ARM NEON) fast-path check
+            File modelDir = new File(context.getFilesDir(), "whisper_models/" + modelTier);
+            File ggmlFile = findGgmlModelFile(modelDir);
+            if (WhisperCppEngine.isAvailable() && ggmlFile != null) {
+                Log.i(TAG, "Selected ultra-fast native C++ whisper.cpp engine with model: " + ggmlFile.getName());
+                if (progressListener != null) {
+                    progressListener.onProgress(5, "starting", 0, 1, 0, totalDurationMs);
+                }
+                BackgroundTaskService.updateTask(context, bgTaskId, "starting", 10);
+
+                try (WhisperCppEngine cppEngine = new WhisperCppEngine(ggmlFile.getAbsolutePath())) {
+                    this.activeCppEngine = cppEngine;
+                    if (cppEngine.isLoaded()) {
+                        int cpuCores = Runtime.getRuntime().availableProcessors();
+                        int numThreads = Math.min(6, Math.max(4, cpuCores <= 4 ? cpuCores : cpuCores - 2));
+
+                        // Windowed streaming: 60s chunks to prevent high heap allocation (OOM)
+                        int windowSamples = 60 * SAMPLE_RATE;
+                        int totalWindows = Math.max(1, (int) Math.ceil((double) totalSamples / windowSamples));
+                        List<SubtitleCue> cppCues = new ArrayList<>();
+
+                        for (int winIdx = 0; winIdx < totalWindows; winIdx++) {
+                            if (isCancelled.get() || !BackgroundTaskService.isTaskRunning(bgTaskId)) {
+                                Log.i(TAG, "whisper.cpp cancelled at window " + winIdx);
+                                break;
+                            }
+                            int startSample = winIdx * windowSamples;
+                            int sampleCount = (int) Math.min(windowSamples, totalSamples - startSample);
+                            long winOffsetMs = (startSample * 1000L) / SAMPLE_RATE;
+                            long winEndMs = ((startSample + sampleCount) * 1000L) / SAMPLE_RATE;
+
+                            float[] windowSamplesArr = readWavChunk(wavFile, startSample, sampleCount);
+                            List<SubtitleCue> windowCues = cppEngine.transcribe(windowSamplesArr, language, numThreads);
+                            for (SubtitleCue cue : windowCues) {
+                                cppCues.add(new SubtitleCue(cue.startMs + winOffsetMs, cue.endMs + winOffsetMs, cue.sourceText, cue.targetText));
+                            }
+
+                            int pct = Math.min(99, 10 + (int) (((winIdx + 1) / (double) totalWindows) * 88));
+                            if (progressListener != null) {
+                                progressListener.onProgress(pct, "transcribing", winIdx + 1, totalWindows, winEndMs, totalDurationMs);
+                            }
+                            BackgroundTaskService.updateTask(context, bgTaskId, "transcribing", pct);
+                        }
+
+                        if (progressListener != null) {
+                            progressListener.onProgress(100, "completed", totalWindows, totalWindows, totalDurationMs, totalDurationMs);
+                        }
+                        return new TranscriptionResult(cppCues, totalDurationMs, modelTier);
+                    } else {
+                        Log.w(TAG, "WhisperCppEngine context init failed, falling back to ONNX engine.");
+                    }
+                } catch (Throwable t) {
+                    Log.w(TAG, "whisper.cpp execution failed, falling back to ONNX: " + t.getMessage(), t);
+                } finally {
+                    this.activeCppEngine = null;
+                }
             }
-            BackgroundTaskService.updateTask(context, bgTaskId, "Ses dalgaları analiz ediliyor...", 10);
+
+            // 3. Fallback: Ensure ONNX model sessions are loaded from disk
+            ensureModelLoaded(modelTier);
+
+            if (progressListener != null) {
+                progressListener.onProgress(10, "analyzing", 0, 1, 0, totalDurationMs);
+            }
+            BackgroundTaskService.updateTask(context, bgTaskId, "analyzing", 10);
 
             int nMels = "large-v3-turbo".equals(modelTier) ? 128 : 80;
             int totalSteps = Math.max(1, (int) Math.ceil((double) totalSamples / STEP_SAMPLES));
@@ -170,7 +235,7 @@ public class NativeWhisperEngine {
                 long chunkEndMs = (endSample * 1000L) / SAMPLE_RATE;
 
                 int progressPct = Math.min(95, 12 + (int) (((double) endSample / totalSamples) * 78));
-                String detail = "Deşifre ediliyor: " + (chunkEndMs / 1000) + "s / " + (totalDurationMs / 1000) + "s";
+                String detail = "transcribing";
 
                 if (progressListener != null) {
                     progressListener.onProgress(progressPct, detail, step + 1, totalSteps, chunkEndMs, totalDurationMs);
@@ -190,9 +255,9 @@ public class NativeWhisperEngine {
                         String recognizedText = inferChunkWithFlatFeatures(flatFeatures, nMels, language, modelTier);
                         if (recognizedText != null && !recognizedText.trim().isEmpty()) {
                             List<SubtitleCue> splitCues = splitSentenceCues(
-                                    recognizedText.trim(),
-                                    chunkStartMs,
-                                    chunkEndMs
+                                     recognizedText.trim(),
+                                     chunkStartMs,
+                                     chunkEndMs
                             );
                             cues.addAll(splitCues);
                         }
@@ -216,7 +281,7 @@ public class NativeWhisperEngine {
             }
 
             if (progressListener != null) {
-                progressListener.onProgress(100, "Tamamlandı", totalSteps, totalSteps, totalDurationMs, totalDurationMs);
+                progressListener.onProgress(100, "completed", totalSteps, totalSteps, totalDurationMs, totalDurationMs);
             }
 
             return new TranscriptionResult(cues, totalDurationMs, modelTier);
@@ -281,26 +346,37 @@ public class NativeWhisperEngine {
             ortEnv = OrtEnvironment.getEnvironment();
         }
 
-        OrtSession.SessionOptions options = new OrtSession.SessionOptions();
-        options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.BASIC_OPT);
         int cpuCores = Runtime.getRuntime().availableProcessors();
-        // Optimize threads: bound between 2 and 4 cores to avoid thermal throttling and UI/OS starvation
-        int optimalThreads = Math.min(4, Math.max(2, cpuCores <= 4 ? cpuCores : 4));
-        options.setIntraOpNumThreads(optimalThreads);
-        options.setInterOpNumThreads(1);
-        options.setMemoryPatternOptimization(true);
+        int encoderThreads = Math.min(6, Math.max(4, cpuCores <= 4 ? cpuCores : cpuCores - 2));
+        int decoderThreads = Math.min(4, Math.max(2, cpuCores / 2));
 
+        // Encoder session options: Optimized for large parallel matrix multiplications
+        OrtSession.SessionOptions encoderOptions = new OrtSession.SessionOptions();
+        encoderOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
+        encoderOptions.setIntraOpNumThreads(encoderThreads);
+        encoderOptions.setInterOpNumThreads(2);
+        encoderOptions.setMemoryPatternOptimization(true);
+        encoderOptions.addConfigEntry("session.intra_op.allow_spinning", "0");
         try {
-            options.addNnapi();
-        } catch (Throwable ignored) {
-            // Safe CPU fallback if NNAPI execution provider is unavailable
-        }
+            encoderOptions.addXnnpack(Collections.emptyMap());
+        } catch (Throwable ignored) {}
 
-        Log.i(TAG, "Loading ONNX encoder from: " + encoderFile.getName() + " with " + optimalThreads + " threads");
-        currentEncoderSession = ortEnv.createSession(encoderFile.getAbsolutePath(), options);
+        // Decoder session options: Bound to fewer threads to prevent context-switch overhead
+        OrtSession.SessionOptions decoderOptions = new OrtSession.SessionOptions();
+        decoderOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT);
+        decoderOptions.setIntraOpNumThreads(decoderThreads);
+        decoderOptions.setInterOpNumThreads(2);
+        decoderOptions.setMemoryPatternOptimization(true);
+        decoderOptions.addConfigEntry("session.intra_op.allow_spinning", "0");
+        try {
+            decoderOptions.addXnnpack(Collections.emptyMap());
+        } catch (Throwable ignored) {}
 
-        Log.i(TAG, "Loading ONNX decoder from: " + decoderFile.getName() + " with " + optimalThreads + " threads");
-        currentDecoderSession = ortEnv.createSession(decoderFile.getAbsolutePath(), options);
+        Log.i(TAG, "Loading ONNX encoder from: " + encoderFile.getName() + " with " + encoderThreads + " threads (ALL_OPT)");
+        currentEncoderSession = ortEnv.createSession(encoderFile.getAbsolutePath(), encoderOptions);
+
+        Log.i(TAG, "Loading ONNX decoder from: " + decoderFile.getName() + " with " + decoderThreads + " threads (ALL_OPT)");
+        currentDecoderSession = ortEnv.createSession(decoderFile.getAbsolutePath(), decoderOptions);
 
         loadedModelTier = modelTier;
         Log.i(TAG, "Whisper model '" + modelTier + "' loaded successfully into 64-bit ONNX Runtime.");
@@ -310,11 +386,20 @@ public class NativeWhisperEngine {
         File[] files = modelDir.listFiles();
         if (files == null) return null;
 
-        // Prioritize unmerged decoder without KV-cache for robust standalone inference
+        // 1. If searching for decoder, prioritize merged decoder with past KV-cache for O(N) generation
         if ("decoder".equalsIgnoreCase(prefix)) {
             for (File f : files) {
                 String name = f.getName().toLowerCase();
-                if (name.startsWith("decoder") && name.endsWith(".onnx") && !name.contains("merged") && !name.contains("with_past") && f.length() > 0) {
+                if (name.startsWith("decoder") && name.endsWith(".onnx") && name.contains("merged") && f.length() > 0) {
+                    Log.i(TAG, "Selected merged KV-cache decoder: " + f.getName());
+                    return f;
+                }
+            }
+            // Fallback to unmerged decoder if merged model is not found
+            for (File f : files) {
+                String name = f.getName().toLowerCase();
+                if (name.startsWith("decoder") && name.endsWith(".onnx") && !name.contains("with_past") && f.length() > 0) {
+                    Log.i(TAG, "Selected unmerged decoder: " + f.getName());
                     return f;
                 }
             }
@@ -323,6 +408,19 @@ public class NativeWhisperEngine {
         for (File f : files) {
             String name = f.getName().toLowerCase();
             if (name.startsWith(prefix) && name.endsWith(".onnx") && f.length() > 0) {
+                return f;
+            }
+        }
+        return null;
+    }
+
+    private File findGgmlModelFile(File modelDir) {
+        if (!modelDir.exists() || !modelDir.isDirectory()) return null;
+        File[] files = modelDir.listFiles();
+        if (files == null) return null;
+        for (File f : files) {
+            String name = f.getName().toLowerCase();
+            if ((name.equals("ggml-model.bin") || name.startsWith("ggml-")) && name.endsWith(".bin") && f.length() > 1024 * 1024) {
                 return f;
             }
         }
@@ -376,93 +474,200 @@ public class NativeWhisperEngine {
         try (OrtSession.Result encoderOutput = currentEncoderSession.run(encoderInputs)) {
             OnnxTensor hiddenStates = (OnnxTensor) encoderOutput.get(0);
 
-                    // 3. Autoregressive Greedy Search Loop
-                    long[] promptTokens = tokenizer.getInitialPromptTokens(language, modelTier);
-                    List<Long> generatedTokens = new ArrayList<>();
-                    for (long t : promptTokens) {
-                        generatedTokens.add(t);
+            long[] promptTokens = tokenizer.getInitialPromptTokens(language, modelTier);
+            List<Long> generatedTokens = new ArrayList<>();
+            for (long t : promptTokens) {
+                generatedTokens.add(t);
+            }
+
+            boolean isMergedDecoder = currentDecoderSession.getInputNames().contains("use_cache_branch")
+                    && currentDecoderSession.getInputNames().contains("past_key_values.0.decoder.key");
+
+            if (isMergedDecoder) {
+                // High-speed O(N) Autoregressive KV-Cache Search Loop
+                return runMergedKvCacheDecoder(hiddenStates, promptTokens, generatedTokens, modelTier);
+            } else {
+                // Robust Fallback: Unmerged Decoder Loop
+                return runUnmergedDecoder(hiddenStates, promptTokens, generatedTokens, modelTier);
+            }
+        }
+    }
+
+    private String runMergedKvCacheDecoder(OnnxTensor hiddenStates, long[] promptTokens,
+                                          List<Long> generatedTokens, String modelTier) throws Exception {
+        int maxNewTokens = ("large-v3-turbo".equals(modelTier) || "small".equals(modelTier)) ? 60 : 80;
+        int endOfTranscriptToken = tokenizer.getEndOfTranscriptToken(modelTier);
+        int repeatCount = 0;
+        long lastToken = -1;
+
+        try (WhisperKVCacheManager kvManager = new WhisperKVCacheManager(ortEnv, modelTier)) {
+            Map<String, OnnxTensor> pastInputs = kvManager.createInitialPastInputs();
+            OrtSession.Result lastResult = null;
+
+            try {
+                for (int step = 0; step < maxNewTokens; step++) {
+                    if (isCancelled.get()) break;
+
+                    boolean isFirstStep = (step == 0);
+                    long[][] tokenIds;
+                    if (isFirstStep) {
+                        tokenIds = new long[1][promptTokens.length];
+                        System.arraycopy(promptTokens, 0, tokenIds[0], 0, promptTokens.length);
+                    } else {
+                        tokenIds = new long[][]{{ lastToken }};
                     }
 
-                    boolean hasUseCacheBranch = currentDecoderSession.getInputNames().contains("use_cache_branch");
-                    OnnxTensor branchTensor = null;
-                    if (hasUseCacheBranch) {
-                        branchTensor = OnnxTensor.createTensor(ortEnv, new boolean[]{false});
-                    }
+                    try (OnnxTensor inputIdsTensor = OnnxTensor.createTensor(ortEnv, tokenIds);
+                         OnnxTensor branchTensor = OnnxTensor.createTensor(ortEnv, new boolean[]{ !isFirstStep })) {
 
-                    try {
-                        int maxNewTokens = ("large-v3-turbo".equals(modelTier) || "small".equals(modelTier)) ? 60 : 80;
-                        int repeatCount = 0;
-                        long lastToken = -1;
+                        Map<String, OnnxTensor> decoderInputs = new HashMap<>();
+                        decoderInputs.put("input_ids", inputIdsTensor);
+                        decoderInputs.put("encoder_hidden_states", hiddenStates);
+                        decoderInputs.put("use_cache_branch", branchTensor);
+                        decoderInputs.putAll(pastInputs);
 
-                        for (int step = 0; step < maxNewTokens; step++) {
-                            if (isCancelled.get()) break;
+                        OrtSession.Result decoderOutput = currentDecoderSession.run(decoderInputs);
+                        OnnxTensor logitsTensor = (OnnxTensor) decoderOutput.get("logits")
+                                .orElse(decoderOutput.get(0));
+                        FloatBuffer fb = logitsTensor.getFloatBuffer();
+                        long[] shape = logitsTensor.getInfo().getShape();
+                        int seqLen = (int) shape[1];
+                        int vocabSize = (int) shape[2];
+                        int offset = (seqLen - 1) * vocabSize;
 
-                            int currentLen = generatedTokens.size();
-                            long[][] inputIds = new long[1][currentLen];
-                            for (int i = 0; i < currentLen; i++) {
-                                inputIds[0][i] = generatedTokens.get(i);
-                            }
-
-                            try (OnnxTensor inputIdsTensor = OnnxTensor.createTensor(ortEnv, inputIds)) {
-                                Map<String, OnnxTensor> decoderInputs = new HashMap<>();
-                                decoderInputs.put("input_ids", inputIdsTensor);
-                                decoderInputs.put("encoder_hidden_states", hiddenStates);
-                                if (branchTensor != null) {
-                                    decoderInputs.put("use_cache_branch", branchTensor);
-                                }
-
-                                try (OrtSession.Result decoderOutput = currentDecoderSession.run(decoderInputs)) {
-                                    OnnxTensor logitsTensor = (OnnxTensor) decoderOutput.get(0);
-                                    FloatBuffer fb = logitsTensor.getFloatBuffer();
-                                    long[] shape = logitsTensor.getInfo().getShape();
-                                    int vocabSize = (int) shape[shape.length - 1];
-                                    int offset = (currentLen - 1) * vocabSize;
-
-                                    // Argmax using direct native FloatBuffer (zero-copy, zero GC allocation)
-                                    int bestToken = 0;
-                                    float maxLogit = -Float.MAX_VALUE;
-                                    for (int v = 0; v < vocabSize; v++) {
-                                        float val = fb.get(offset + v);
-                                        if (val > maxLogit) {
-                                            maxLogit = val;
-                                            bestToken = v;
-                                        }
-                                    }
-
-                                    if (bestToken == tokenizer.getEndOfTranscriptToken(modelTier)) {
-                                        break;
-                                    }
-
-                                    // Hallucination and repetition protection: early stop on 3 consecutive identical tokens
-                                    if (bestToken == lastToken) {
-                                        repeatCount++;
-                                        if (repeatCount >= 3) {
-                                            Log.d(TAG, "Early stop: detected 3 consecutive identical tokens (" + bestToken + ")");
-                                            break;
-                                        }
-                                    } else {
-                                        lastToken = bestToken;
-                                        repeatCount = 1;
-                                    }
-
-                                    generatedTokens.add((long) bestToken);
-                                }
+                        int bestToken = 0;
+                        float maxLogit = -Float.MAX_VALUE;
+                        for (int v = 0; v < vocabSize; v++) {
+                            float val = fb.get(offset + v);
+                            if (val > maxLogit) {
+                                maxLogit = val;
+                                bestToken = v;
                             }
                         }
-                    } finally {
-                        if (branchTensor != null) {
-                            try { branchTensor.close(); } catch (Exception ignored) {}
+
+                        if (bestToken == endOfTranscriptToken) {
+                            decoderOutput.close();
+                            break;
                         }
-                    }
 
-                    // Convert generated tokens to text
-                    long[] finalTokens = new long[generatedTokens.size()];
-                    for (int i = 0; i < generatedTokens.size(); i++) {
-                        finalTokens[i] = generatedTokens.get(i);
-                    }
+                        if (bestToken == lastToken) {
+                            repeatCount++;
+                            if (repeatCount >= 3) {
+                                Log.d(TAG, "Early stop: 3 consecutive identical tokens (" + bestToken + ")");
+                                decoderOutput.close();
+                                break;
+                            }
+                        } else {
+                            lastToken = bestToken;
+                            repeatCount = 1;
+                        }
 
-                    return tokenizer.decode(finalTokens);
+                        generatedTokens.add((long) bestToken);
+                        pastInputs = kvManager.updateCacheFromResults(decoderOutput, isFirstStep);
+
+                        if (lastResult != null) {
+                            try { lastResult.close(); } catch (Exception ignored) {}
+                        }
+                        lastResult = decoderOutput;
+                    }
                 }
+            } finally {
+                if (lastResult != null) {
+                    try { lastResult.close(); } catch (Exception ignored) {}
+                }
+            }
+        }
+
+        return decodeGeneratedTokens(generatedTokens, promptTokens.length);
+    }
+
+    private String runUnmergedDecoder(OnnxTensor hiddenStates, long[] promptTokens,
+                                     List<Long> generatedTokens, String modelTier) throws Exception {
+        int maxNewTokens = ("large-v3-turbo".equals(modelTier) || "small".equals(modelTier)) ? 60 : 80;
+        int endOfTranscriptToken = tokenizer.getEndOfTranscriptToken(modelTier);
+        int repeatCount = 0;
+        long lastToken = -1;
+
+        boolean hasUseCacheBranch = currentDecoderSession.getInputNames().contains("use_cache_branch");
+        OnnxTensor branchTensor = hasUseCacheBranch ? OnnxTensor.createTensor(ortEnv, new boolean[]{false}) : null;
+
+        try {
+            for (int step = 0; step < maxNewTokens; step++) {
+                if (isCancelled.get()) break;
+
+                int currentLen = generatedTokens.size();
+                long[][] inputIds = new long[1][currentLen];
+                for (int i = 0; i < currentLen; i++) {
+                    inputIds[0][i] = generatedTokens.get(i);
+                }
+
+                try (OnnxTensor inputIdsTensor = OnnxTensor.createTensor(ortEnv, inputIds)) {
+                    Map<String, OnnxTensor> decoderInputs = new HashMap<>();
+                    decoderInputs.put("input_ids", inputIdsTensor);
+                    decoderInputs.put("encoder_hidden_states", hiddenStates);
+                    if (branchTensor != null) {
+                        decoderInputs.put("use_cache_branch", branchTensor);
+                    }
+
+                    try (OrtSession.Result decoderOutput = currentDecoderSession.run(decoderInputs)) {
+                        OnnxTensor logitsTensor = (OnnxTensor) decoderOutput.get(0);
+                        FloatBuffer fb = logitsTensor.getFloatBuffer();
+                        long[] shape = logitsTensor.getInfo().getShape();
+                        int vocabSize = (int) shape[shape.length - 1];
+                        int offset = (currentLen - 1) * vocabSize;
+
+                        int bestToken = 0;
+                        float maxLogit = -Float.MAX_VALUE;
+                        for (int v = 0; v < vocabSize; v++) {
+                            float val = fb.get(offset + v);
+                            if (val > maxLogit) {
+                                maxLogit = val;
+                                bestToken = v;
+                            }
+                        }
+
+                        if (bestToken == endOfTranscriptToken) {
+                            break;
+                        }
+
+                        if (bestToken == lastToken) {
+                            repeatCount++;
+                            if (repeatCount >= 3) break;
+                        } else {
+                            lastToken = bestToken;
+                            repeatCount = 1;
+                        }
+
+                        generatedTokens.add((long) bestToken);
+                    }
+                }
+            }
+        } finally {
+            if (branchTensor != null) {
+                try { branchTensor.close(); } catch (Exception ignored) {}
+            }
+        }
+
+        return decodeGeneratedTokens(generatedTokens, promptTokens.length);
+    }
+
+    private String decodeGeneratedTokens(List<Long> generatedTokens, int promptLen) {
+        if (generatedTokens.size() <= promptLen) {
+            return "";
+        }
+        int textTokensCount = generatedTokens.size() - promptLen;
+        long[] textTokenArray = new long[textTokensCount];
+        for (int i = 0; i < textTokensCount; i++) {
+            textTokenArray[i] = generatedTokens.get(promptLen + i);
+        }
+
+        if (NativeRustBridge.isAvailable()) {
+            String decoded = NativeRustBridge.decodeTokens(textTokenArray);
+            if (decoded != null && !decoded.trim().isEmpty()) {
+                return decoded.trim();
+            }
+        }
+        return tokenizer.decode(textTokenArray);
     }
 
     public synchronized void close() {

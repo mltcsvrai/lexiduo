@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, X, Eye, EyeOff, Sparkles, Globe, Languages, Cpu, ExternalLink, ShieldCheck, Lock, ChevronDown, ChevronUp, HelpCircle, CheckCircle2, AlertCircle, AlertTriangle, WifiOff, Loader2 } from 'lucide-react';
+import { Settings, X, Eye, EyeOff, Sparkles, Globe, Languages, Cpu, ExternalLink, ShieldCheck, Lock, ChevronDown, ChevronUp, ChevronRight, HelpCircle, CheckCircle2, AlertCircle, AlertTriangle, WifiOff, Loader2 } from 'lucide-react';
 import { useTranslation } from '../i18n/useTranslation';
 import type { Language } from '../i18n/translations';
 import { SUPPORTED_LANGUAGES } from '../i18n/languages';
@@ -21,6 +21,7 @@ export interface ApiKeyModalProps {
   onSave?: (key: string) => void;
   currentKey?: string;
   extraSections?: React.ReactNode;
+  onOpenPermissions?: () => void;
 }
 
 export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ 
@@ -28,7 +29,8 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
   onClose, 
   onSave, 
   currentKey, 
-  extraSections 
+  extraSections,
+  onOpenPermissions
 }) => {
   const { t, language, setLanguage } = useTranslation();
   const storeApiKey = useAppStore(s => s.apiKey);
@@ -136,6 +138,29 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               : t('engineStandard')}
           </span>
         </div>
+
+        {/* System Permissions & Access Card */}
+        {onOpenPermissions && (
+          <div className="bg-black/40 border border-white/10 rounded-2xl p-3.5 flex items-center justify-between">
+            <div className="flex items-center space-x-2.5 min-w-0 pr-2 flex-1">
+              <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">
+                <ShieldCheck size={18} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold text-slate-200 truncate">{t('systemPermissionsTitle')}</div>
+                <div className="text-[11px] text-slate-400 truncate">{t('systemPermissionsDesc')}</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenPermissions}
+              className="inline-flex items-center space-x-1 px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/10 hover:bg-white/15 text-white transition-all shrink-0 cursor-pointer active:scale-95"
+            >
+              <span>{t('manage')}</span>
+              <ChevronRight size={13} className="text-slate-400" />
+            </button>
+          </div>
+        )}
 
         {/* Interface Language */}
         <div className="space-y-2">

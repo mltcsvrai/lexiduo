@@ -2,6 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   formatCuesForFloating,
   checkFloatingPermissions,
+  openAppSettings,
+  requestBatteryOptimization,
+  requestNotificationPermission,
   startFloatingOverlay,
   stopFloatingOverlay,
   loadFloatingCues,
@@ -62,6 +65,14 @@ describe('floatingSubtitleService', () => {
       expect(status.overlay).toBe(true);
       expect(status.notification).toBe(true);
       expect(status.accessibility).toBe(true);
+      expect(status.postNotifications).toBe(true);
+      expect(status.batteryOptimization).toBe(true);
+    });
+
+    it('handles permission request methods safely on web', async () => {
+      await expect(openAppSettings()).resolves.toBeUndefined();
+      await expect(requestBatteryOptimization()).resolves.toBeUndefined();
+      await expect(requestNotificationPermission()).resolves.toBeUndefined();
     });
 
     it('manages overlay start, running state, cue loading, and stop', async () => {

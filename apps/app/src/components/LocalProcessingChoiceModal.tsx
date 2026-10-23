@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Cloud, Key, X, Sparkles } from 'lucide-react';
+import { Cpu, Cloud, Key, X, Sparkles, CheckCircle2, Download, ShieldCheck } from 'lucide-react';
 import { useTranslation } from '@lexiduo/core';
 
 interface LocalProcessingChoiceModalProps {
@@ -19,9 +19,9 @@ export const LocalProcessingChoiceModal: React.FC<LocalProcessingChoiceModalProp
   fileName,
   fileSizeMb,
   hasApiKey,
-  activeWhisperTierName: _activeWhisperTierName = 'Whisper AI',
-  isWhisperDownloaded: _isWhisperDownloaded = false,
-  onSelectWhisper: _onSelectWhisper,
+  activeWhisperTierName = 'Whisper AI',
+  isWhisperDownloaded = false,
+  onSelectWhisper,
   onSelectCloudApi,
   onClose
 }) => {
@@ -30,6 +30,10 @@ export const LocalProcessingChoiceModal: React.FC<LocalProcessingChoiceModalProp
   const [showKeyInput, setShowKeyInput] = useState(!hasApiKey);
 
   if (!isOpen) return null;
+
+  const handleWhisperClick = () => {
+    onSelectWhisper();
+  };
 
   const handleCloudSubmit = () => {
     if (hasApiKey) {
@@ -42,7 +46,12 @@ export const LocalProcessingChoiceModal: React.FC<LocalProcessingChoiceModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="relative w-full max-w-xl bg-neutral-900 border border-neutral-700/60 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden">
         {/* Subtle decorative background gradient */}
         <div className="absolute -top-24 -left-24 w-48 h-48 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -61,16 +70,52 @@ export const LocalProcessingChoiceModal: React.FC<LocalProcessingChoiceModalProp
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-white rounded-xl hover:bg-neutral-800 transition"
+            className="p-2 text-neutral-400 hover:text-white rounded-xl hover:bg-neutral-800 transition cursor-pointer"
+            aria-label={t('close')}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Options Grid */}
-        <div className="my-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 my-5">
+          {/* Option 1: On-Device Whisper AI */}
+          <div className="flex flex-col justify-between p-5 rounded-2xl bg-neutral-800/60 border border-neutral-700/60 hover:border-red-500/50 transition-all group">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400">
+                  <Cpu className="w-6 h-6" />
+                </div>
+                {isWhisperDownloaded ? (
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    <CheckCircle2 className="w-3 h-3" /> {t('readyBadge')}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                    <Download className="w-3 h-3" /> {t('willDownloadBadge')}
+                  </span>
+                )}
+              </div>
+              <h3 className="text-base font-bold text-white mb-1">{t('onDeviceWhisperTitle')}</h3>
+              <p className="text-xs text-neutral-400 leading-relaxed mb-3">
+                {t('onDeviceWhisperDesc')}
+              </p>
+              <div className="flex items-center gap-1.5 text-[11px] text-neutral-400 bg-neutral-900/60 p-2 rounded-xl mb-4 border border-neutral-800">
+                <ShieldCheck className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                <span className="truncate">Model: <strong>{activeWhisperTierName}</strong></span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleWhisperClick}
+              className="w-full py-2.5 px-4 rounded-xl bg-neutral-700 hover:bg-red-600 text-white font-semibold text-xs transition duration-200 shadow-md group-hover:bg-red-600 cursor-pointer"
+            >
+              {isWhisperDownloaded ? t('startWithWhisper') : t('downloadWhisperModelBtn')}
+            </button>
+          </div>
+
           {/* Option 2: Cloud Google Gemini API */}
-          <div className="flex flex-col justify-between p-5 sm:p-6 rounded-2xl bg-neutral-800/60 border border-neutral-700/60 hover:border-blue-500/50 transition-all group">
+          <div className="flex flex-col justify-between p-5 rounded-2xl bg-neutral-800/60 border border-neutral-700/60 hover:border-blue-500/50 transition-all group">
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400">

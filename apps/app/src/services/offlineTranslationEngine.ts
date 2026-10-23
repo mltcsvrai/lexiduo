@@ -9,6 +9,7 @@ import {
   downloadNativeModelTier,
   deleteNativeModelTier
 } from './nativeWhisperBridge';
+import { translateWithMarian } from './marianTranslationEngine';
 
 export type WhisperTierKey = 'tiny' | 'base' | 'small' | 'large-v3-turbo';
 
@@ -40,8 +41,8 @@ export const WHISPER_TIERS: Record<WhisperTierKey, WhisperTierConfig> = {
     hardwareLoad: 1,
     minRam: '2 GB',
     recRam: '3-4 GB',
-    taglineTr: 'En Hızlı & Ultra Hafif',
-    taglineEn: 'Fastest & Ultra Light',
+    taglineTr: 'En Hızlı & Ultra Hafif (C++ & ARM NEON)',
+    taglineEn: 'Fastest & Ultra Light (C++ & ARM NEON)',
     descTr: 'Temel Seviye',
     descEn: 'Entry Level'
   },
@@ -54,8 +55,8 @@ export const WHISPER_TIERS: Record<WhisperTierKey, WhisperTierConfig> = {
     hardwareLoad: 2,
     minRam: '3-4 GB',
     recRam: '6 GB',
-    taglineTr: 'Dengeli & Hızlı',
-    taglineEn: 'Balanced & Fast',
+    taglineTr: 'Dengeli & Hızlı (C++ Hızlandırmalı)',
+    taglineEn: 'Balanced & Fast (C++ Accelerated)',
     descTr: "Whisper Tiny'ye Göre 2x Doğruluk",
     descEn: '2x Accuracy vs Whisper Tiny'
   },
@@ -68,8 +69,8 @@ export const WHISPER_TIERS: Record<WhisperTierKey, WhisperTierConfig> = {
     hardwareLoad: 3,
     minRam: '6 GB',
     recRam: '8 GB',
-    taglineTr: 'Stüdyo Kalite',
-    taglineEn: 'Studio Quality',
+    taglineTr: 'Stüdyo Kalite (C++ & KV-Cache)',
+    taglineEn: 'Studio Quality (C++ & KV-Cache)',
     descTr: 'Yüksek Hassasiyet',
     descEn: 'High Precision',
     recommendedDevice: 'Snapdragon 7+/8 Gen 1/2',
@@ -85,8 +86,8 @@ export const WHISPER_TIERS: Record<WhisperTierKey, WhisperTierConfig> = {
     hardwareLoad: 5,
     minRam: '8 GB',
     recRam: '12 GB+',
-    taglineTr: 'Zirve Hassasiyet (Galaxy S25 & 64-Bit Donanım Hızlandırmalı)',
-    taglineEn: 'Peak Precision (Galaxy S25 & 64-Bit Hardware Accelerated)',
+    taglineTr: 'Zirve Hassasiyet (Galaxy S25 & C++ 64-Bit Donanım Hızlandırmalı)',
+    taglineEn: 'Peak Precision (Galaxy S25 & C++ 64-Bit Hardware Accelerated)',
     descTr: 'Kusursuz Tanıma (Galaxy S25, Tab S9+, 8 Elite)',
     descEn: 'Flawless Recognition (Galaxy S25, Tab S9+, 8 Elite)',
     recommendedDevice: 'Galaxy S25 / Snapdragon 8 Elite',
@@ -721,7 +722,17 @@ export async function translateStudioText(
     // ignore network errors
   }
 
-  // 2. Offline fallback (common vocabulary)
+  // 2. Offline Marian NMT (Opus-MT on-device neural translation)
+  try {
+    const marianResult = await translateWithMarian(text, cleanFrom, cleanTo);
+    if (marianResult && marianResult.trim().toLowerCase() !== text.trim().toLowerCase()) {
+      return marianResult;
+    }
+  } catch {
+    // fallback to dictionary
+  }
+
+  // 3. Offline fallback (common vocabulary)
   const localFallback = translateWithOfflineModel(text, cleanFrom, cleanTo);
   if (localFallback && localFallback.trim().toLowerCase() !== text.trim().toLowerCase()) {
     return localFallback;

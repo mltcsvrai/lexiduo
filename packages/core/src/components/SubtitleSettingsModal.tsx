@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   Palette, 
   Sparkles, 
@@ -32,6 +32,7 @@ import {
   BG_COLOR_SWATCHES,
   syncStyleToNativeOverlay,
   type SubtitlePalette,
+  type SubtitleStyleSyncParams,
 } from '../utils/colorPalettes';
 
 type SettingsTab = 'appearance' | 'behaviors' | 'position';
@@ -98,35 +99,52 @@ export const SubtitleSettingsModal: React.FC<SubtitleSettingsModalProps> = ({
   const karaokeHighlight = useAppStore(s => s.karaokeHighlight);
   const setKaraokeHighlight = useAppStore(s => s.setKaraokeHighlight);
 
+  const syncAllStyles = useCallback((override?: Partial<SubtitleStyleSyncParams>) => {
+    syncStyleToNativeOverlay({
+      sourceTextColor,
+      targetTextColor,
+      bgColor,
+      bgOpacity,
+      fontSize,
+      showSubtitleBg,
+      bgWidthMode,
+      subtitleMode,
+      fontFamily,
+      fontWeight,
+      textOutline,
+      ...override,
+    });
+  }, [sourceTextColor, targetTextColor, bgColor, bgOpacity, fontSize, showSubtitleBg, bgWidthMode, subtitleMode, fontFamily, fontWeight, textOutline]);
+
   const handleSourceColorChange = (c: string) => {
     setSourceTextColor(c);
-    syncStyleToNativeOverlay({ sourceTextColor: c, targetTextColor, bgColor, bgOpacity, fontSize, showSubtitleBg, bgWidthMode });
+    syncAllStyles({ sourceTextColor: c });
   };
 
   const handleTargetColorChange = (c: string) => {
     setTargetTextColor(c);
-    syncStyleToNativeOverlay({ sourceTextColor, targetTextColor: c, bgColor, bgOpacity, fontSize, showSubtitleBg, bgWidthMode });
+    syncAllStyles({ targetTextColor: c });
   };
 
   const handleBgColorChange = (c: string) => {
     setBgColor(c);
-    syncStyleToNativeOverlay({ sourceTextColor, targetTextColor, bgColor: c, bgOpacity, fontSize, showSubtitleBg, bgWidthMode });
+    syncAllStyles({ bgColor: c });
   };
 
   const handleToggleSubtitleBg = () => {
     const nextVal = !showSubtitleBg;
     setShowSubtitleBg(nextVal);
-    syncStyleToNativeOverlay({ sourceTextColor, targetTextColor, bgColor, bgOpacity, fontSize, showSubtitleBg: nextVal, bgWidthMode });
+    syncAllStyles({ showSubtitleBg: nextVal });
   };
 
   const handleBgOpacityChange = (val: number) => {
     setBgOpacity(val);
-    syncStyleToNativeOverlay({ sourceTextColor, targetTextColor, bgColor, bgOpacity: val, fontSize, showSubtitleBg, bgWidthMode });
+    syncAllStyles({ bgOpacity: val });
   };
 
   const handleBgWidthModeChange = (mode: SubtitleBgWidthMode) => {
     setBgWidthMode(mode);
-    syncStyleToNativeOverlay({ sourceTextColor, targetTextColor, bgColor, bgOpacity, fontSize, showSubtitleBg, bgWidthMode: mode });
+    syncAllStyles({ bgWidthMode: mode });
   };
 
   const handleSelectPalette = (p: SubtitlePalette) => {
@@ -135,15 +153,33 @@ export const SubtitleSettingsModal: React.FC<SubtitleSettingsModalProps> = ({
     setBgColor(p.bgColor);
     setBgOpacity(p.bgOpacity);
     setShowSubtitleBg(true);
-    syncStyleToNativeOverlay({
+    syncAllStyles({
       sourceTextColor: p.sourceTextColor,
       targetTextColor: p.targetTextColor,
       bgColor: p.bgColor,
       bgOpacity: p.bgOpacity,
-      fontSize,
       showSubtitleBg: true,
-      bgWidthMode,
     });
+  };
+
+  const handleFontFamilyChange = (f: SubtitleFontFamily) => {
+    setFontFamily(f);
+    syncAllStyles({ fontFamily: f });
+  };
+
+  const handleFontWeightChange = (w: SubtitleFontWeight) => {
+    setFontWeight(w);
+    syncAllStyles({ fontWeight: w });
+  };
+
+  const handleTextOutlineChange = (outline: SubtitleTextOutline) => {
+    setTextOutline(outline);
+    syncAllStyles({ textOutline: outline });
+  };
+
+  const handleSubtitleModeChange = (m: SubtitleMode) => {
+    setSubtitleMode(m);
+    syncAllStyles({ subtitleMode: m });
   };
 
   if (!isOpen) return null;
@@ -317,7 +353,7 @@ export const SubtitleSettingsModal: React.FC<SubtitleSettingsModalProps> = ({
                     <button
                       key={f}
                       type="button"
-                      onClick={() => setFontFamily(f)}
+                      onClick={() => handleFontFamilyChange(f)}
                       className={`p-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
                         fontFamily === f 
                           ? 'bg-red-500/20 text-red-300 border-red-500/50 shadow-sm' 
@@ -340,7 +376,7 @@ export const SubtitleSettingsModal: React.FC<SubtitleSettingsModalProps> = ({
                     <button
                       key={w}
                       type="button"
-                      onClick={() => setFontWeight(w)}
+                      onClick={() => handleFontWeightChange(w)}
                       className={`p-2.5 rounded-xl text-xs transition-all border cursor-pointer ${
                         fontWeight === w 
                           ? 'bg-red-500/20 text-red-300 border-red-500/50 shadow-sm' 
@@ -363,7 +399,7 @@ export const SubtitleSettingsModal: React.FC<SubtitleSettingsModalProps> = ({
                     <button
                       key={outline}
                       type="button"
-                      onClick={() => setTextOutline(outline)}
+                      onClick={() => handleTextOutlineChange(outline)}
                       className={`p-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
                         textOutline === outline 
                           ? 'bg-red-500/20 text-red-300 border-red-500/50 shadow-sm' 
@@ -437,7 +473,7 @@ export const SubtitleSettingsModal: React.FC<SubtitleSettingsModalProps> = ({
                     <button
                       key={m}
                       type="button"
-                      onClick={() => setSubtitleMode(m)}
+                      onClick={() => handleSubtitleModeChange(m)}
                       className={`p-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
                         subtitleMode === m 
                           ? 'bg-red-500/20 text-red-300 border-red-500/50 shadow-sm' 

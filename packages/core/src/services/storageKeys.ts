@@ -18,6 +18,7 @@ export const STORAGE_KEYS = {
   BG_COLOR: { primary: 'lexiduo_bg_color', legacy: 'yt_ceviri_bg_color' },
   BG_OPACITY: { primary: 'lexiduo_bg_opacity', legacy: 'yt_ceviri_bg_opacity' },
   TEXT_OUTLINE: { primary: 'lexiduo_text_outline', legacy: 'yt_ceviri_text_outline' },
+  HIDE_DOWNLOAD_LOCATION_NOTICE: { primary: 'lexiduo_hide_download_location_notice', legacy: 'yt_ceviri_hide_download_location_notice' },
 } as const;
 
 export async function getCompatItem<T>(primaryKey: string, legacyKey: string): Promise<T | undefined> {

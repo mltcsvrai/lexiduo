@@ -35,7 +35,14 @@ export async function processDetectedVideo(
 ): Promise<boolean> {
   if (!data || !data.title) return false;
 
-  const videoKey = `${data.title}::${data.videoId || ''}`;
+  const currentStore = useAppStore.getState();
+  const sourceLang = options?.sourceLang;
+  const targetLang = options?.targetLang;
+  const activeSource = (sourceLang && sourceLang.trim()) || (data.sourceLang && data.sourceLang.trim()) || 'auto';
+  const activeTarget = (targetLang && targetLang.trim()) || (data.targetLang && data.targetLang.trim()) || (currentStore.targetLang && currentStore.targetLang.trim()) || 'tr';
+  const apiKey = currentStore.apiKey;
+
+  const videoKey = `${data.title}::${data.videoId || ''}::${activeSource}::${activeTarget}`;
   if (lastProcessedVideoRef.current === videoKey) {
     return false;
   }
@@ -45,13 +52,6 @@ export async function processDetectedVideo(
   // Immediately clear previous video subtitles from floating overlay to prevent stale text
   await clearFloatingCues();
   if (currentReqId !== activeRequestIdRef.current) return false;
-
-  const currentStore = useAppStore.getState();
-  const sourceLang = options?.sourceLang;
-  const targetLang = options?.targetLang;
-  const activeSource = (sourceLang && sourceLang.trim()) || (data.sourceLang && data.sourceLang.trim()) || 'auto';
-  const activeTarget = (targetLang && targetLang.trim()) || (data.targetLang && data.targetLang.trim()) || (currentStore.targetLang && currentStore.targetLang.trim()) || 'tr';
-  const apiKey = currentStore.apiKey;
 
   try {
     let resolvedId = (data.videoId || '').trim();
@@ -121,6 +121,7 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
 
   const lastProcessedVideoRef = useRef<string>('');
   const activeRequestIdRef = useRef<number>(0);
+  const lastDetectedDataRef = useRef<AutoAssistantVideoDetectedData | null>(null);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -176,10 +177,13 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
     };
   }, [refreshStatus]);
 
-  // Synchronize language updates from app settings to native assistant service
+  // Synchronize language updates from app settings to native assistant service and re-fetch if video is active
   useEffect(() => {
     if (isActive) {
       FloatingSubtitle.updateAssistantLanguages({ sourceLang, targetLang }).catch(() => {});
+      if (lastDetectedDataRef.current) {
+        processDetectedVideo(lastDetectedDataRef.current, activeRequestIdRef, lastProcessedVideoRef, { sourceLang, targetLang }).catch(() => {});
+      }
     }
   }, [isActive, sourceLang, targetLang]);
 
@@ -193,6 +197,7 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
       await set(IDB_KEY_AUTO_ASSISTANT, false);
       setIsActive(false);
       lastProcessedVideoRef.current = '';
+      lastDetectedDataRef.current = null;
     };
 
     try {
@@ -219,12 +224,14 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
     if (!isActive) {
       activeRequestIdRef.current++;
       lastProcessedVideoRef.current = '';
+      lastDetectedDataRef.current = null;
       return;
     }
 
     let listenerHandle: any = null;
 
     const handleDetectedVideo = async (data: AutoAssistantVideoDetectedData) => {
+      lastDetectedDataRef.current = data;
       await processDetectedVideo(data, activeRequestIdRef, lastProcessedVideoRef, { sourceLang, targetLang });
     };
 
@@ -249,9 +256,11 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
       const perms = await checkFloatingPermissions();
       setPermissions(perms);
 
-      if (!perms.overlay) {
+      if (!perms.overlay || !perms.notification) {
         onOpenPermissionGuideRef.current?.();
-        return false;
+        if (!perms.overlay) {
+          return false;
+        }
       }
 
       const res = await FloatingSubtitle.startAutoAssistant({ sourceLang, targetLang });
@@ -293,6 +302,7 @@ export function useAutoYouTubeAssistant(options?: UseAutoYouTubeAssistantOptions
       ]);
       setIsActive(false);
       lastProcessedVideoRef.current = '';
+      lastDetectedDataRef.current = null;
       return Boolean(res?.stopped || res?.enabled === false);
     } catch (err) {
       console.error('Failed to stop auto assistant:', err);

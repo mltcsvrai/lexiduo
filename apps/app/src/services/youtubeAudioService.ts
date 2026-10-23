@@ -1,5 +1,6 @@
-import { smartFetch } from '@lexiduo/core';
+import { resolveYouTubeStreams, type VideoStreamFormat } from '@lexiduo/core';
 import { extractAudioFromVideo, type AudioExtractionProgress } from './audioExtractor';
+import { isNativeWhisperAvailable, extractNativeAudio } from './nativeWhisperBridge';
 
 export interface AudioDownloadProgress {
   loaded: number;
@@ -95,7 +96,7 @@ export async function consumeAudioResponse(
 }
 
 /**
- * Extracts direct unencrypted audio stream URL from YouTube InnerTube using Android client context.
+ * Extracts direct unencrypted audio stream URL from YouTube InnerTube using VISIONOS/IOS client context.
  * Bypasses datacenter rate-limits by executing directly on the client's residential/cellular IP.
  */
 export async function extractDirectClientAudioUrl(
@@ -110,80 +111,17 @@ export async function extractDirectClientAudioUrl(
     throw new DOMException('Aborted', 'AbortError');
   }
 
-  // 1. Fetch Watch page to extract INNERTUBE_API_KEY
-  const watchRes = await smartFetch(
-    `https://www.youtube.com/watch?v=${videoId}`,
-    {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-    },
-    10000
-  );
+  const formats: VideoStreamFormat[] = await resolveYouTubeStreams(videoId, signal);
 
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
-
-  const html = await watchRes.text();
-  const keyMatch = html.match(/"INNERTUBE_API_KEY":"([^"]+)"/);
-  const apiKey = keyMatch ? keyMatch[1] : '';
-
-  if (!apiKey) {
-    throw new Error('Failed to extract InnerTube API key from YouTube page');
-  }
-
-  // 2. Query InnerTube Player API with modern Android client context
-  const playerRes = await smartFetch(
-    `https://www.youtube.com/youtubei/v1/player?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Linux; Android 14)',
-      },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: 'ANDROID',
-            clientVersion: '20.10.38',
-            androidSdkVersion: 34
-          }
-        },
-        videoId
-      })
-    },
-    10000
-  );
-
-  if (signal?.aborted) {
-    throw new DOMException('Aborted', 'AbortError');
-  }
-
-  const playerData = await playerRes.json();
-  const formats = [
-    ...(playerData?.streamingData?.adaptiveFormats || []),
-    ...(playerData?.streamingData?.formats || [])
-  ];
-
-  // Filter formats with valid direct URLs
-  const validFormats = formats.filter(
-    (f: any) => f && typeof f.url === 'string' && f.url.startsWith('http')
-  );
-
-  // Preference hierarchy:
+  // Audio format hierarchy:
   // 1. itag 140: audio/mp4 (AAC 128kbps) - widest audio decoder compatibility
   // 2. itag 251: audio/webm (Opus 160kbps)
-  // 3. other audio/* format with url
-  // 4. itag 18: video/mp4 (360p with audio)
-  let best = validFormats.find((f: any) => f.itag === 140);
-  if (!best) {
-    best = validFormats.find((f: any) => f.itag === 251);
-  }
-  if (!best) {
-    best = validFormats.find((f: any) => f.mimeType && f.mimeType.includes('audio/'));
-  }
-  if (!best) {
-    best = validFormats.find((f: any) => f.itag === 18 || (f.mimeType && f.mimeType.includes('video/mp4')));
-  }
+  // 3. other audio format with url
+  // 4. itag 18: video/mp4 (360p audio fallback)
+  const best = formats.find(f => f.hasAudio && f.itag === 140) ||
+    formats.find(f => f.hasAudio && f.itag === 251) ||
+    formats.find(f => f.hasAudio) ||
+    formats.find(f => f.itag === 18);
 
   if (!best || !best.url) {
     throw new Error('No direct streamable audio format found in InnerTube response');
@@ -312,6 +250,16 @@ export async function fetchYouTubeAudioBlob(
   return await fetchRemoteWorkerAudioBlob(videoId, onProgress, signal);
 }
 
+let lastCachedAudioPath: string | null = null;
+
+export function getLastCachedAudioPath(): string | null {
+  return lastCachedAudioPath;
+}
+
+export function setLastCachedAudioPath(path: string | null): void {
+  lastCachedAudioPath = path;
+}
+
 /**
  * Downloads audio blob from YouTube worker and extracts 16kHz mono Float32Array PCM samples.
  * Progress callback reports stage and overall percent (0-50% downloading, 50-100% extraction).
@@ -322,6 +270,72 @@ export async function downloadAndExtractYouTubeAudio(
   signal?: AbortSignal
 ): Promise<Float32Array> {
   onProgress?.('downloading', 0);
+
+  // High-performance Native Android path: bypass WebView RAM and AudioContext Float32Array extraction
+  if (isNativeWhisperAvailable()) {
+    try {
+      const audioBlob = await fetchYouTubeAudioBlob(
+        videoId,
+        (progress) => {
+          const percent = Math.min(50, Math.round((progress.percent / 100) * 50));
+          onProgress?.('downloading', percent);
+        },
+        signal
+      );
+
+      if (signal?.aborted) {
+        throw new DOMException('Aborted', 'AbortError');
+      }
+
+      onProgress?.('extracting', 55);
+
+      // Write compressed audio blob to device cache
+      const { Filesystem, Directory } = await import('@capacitor/filesystem');
+      const tempFileName = `whisper_audio/yt_${videoId}_${Date.now()}.mp4`;
+
+      const reader = new FileReader();
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const res = reader.result as string;
+          const b64 = res.includes(',') ? res.split(',')[1] : res;
+          resolve(b64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(audioBlob);
+      });
+
+      await Filesystem.writeFile({
+        path: tempFileName,
+        data: base64Data,
+        directory: Directory.Cache,
+        recursive: true
+      });
+
+      const uriRes = await Filesystem.getUri({
+        path: tempFileName,
+        directory: Directory.Cache
+      });
+
+      onProgress?.('extracting', 75);
+
+      // Extract 16kHz mono WAV natively with zero WebView RAM impact
+      const extRes = await extractNativeAudio(uriRes.uri);
+      setLastCachedAudioPath(extRes.wavPath);
+
+      onProgress?.('ready', 100);
+
+      const audioProxy = new Float32Array(16000);
+      (audioProxy as any).audioPath = extRes.wavPath;
+      (audioProxy as any).cachedAudioPath = extRes.wavPath;
+      (audioProxy as any).duration = extRes.durationMs / 1000;
+      return audioProxy;
+    } catch (nativeErr: any) {
+      if (nativeErr?.name === 'AbortError' || signal?.aborted) {
+        throw nativeErr;
+      }
+      console.warn('[youtubeAudioService] Native file extraction failed, falling back to Web Audio:', nativeErr);
+    }
+  }
 
   const audioBlob = await fetchYouTubeAudioBlob(
     videoId,

@@ -35,6 +35,7 @@ public class FloatingOverlayNotificationHelper {
         }
 
         Intent appIntent = new Intent(service, MainActivity.class);
+        appIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pendingIntent = PendingIntent.getActivity(
                 service, 0, appIntent,
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0

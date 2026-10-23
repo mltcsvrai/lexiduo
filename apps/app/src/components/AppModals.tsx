@@ -14,6 +14,7 @@ import type { WhisperProgress } from '../services/whisperEngine';
 const YouTubePlaybackChoiceModal = lazy(() => import('./YouTubePlaybackChoiceModal').then(m => ({ default: m.YouTubePlaybackChoiceModal })));
 const YouTubeWhisperModal = lazy(() => import('./YouTubeWhisperModal').then(m => ({ default: m.YouTubeWhisperModal })));
 const LocalProcessingChoiceModal = lazy(() => import('./LocalProcessingChoiceModal').then(m => ({ default: m.LocalProcessingChoiceModal })));
+const WhisperModelsModal = lazy(() => import('./WhisperModelsModal').then(m => ({ default: m.WhisperModelsModal })));
 
 export interface AppModalsProps {
   // Settings & Appearance
@@ -66,6 +67,8 @@ export interface AppModalsProps {
   whisperProgress: WhisperProgress | null;
   statusText: string;
   progressPercent: number;
+  onCancelProcessing?: () => void;
+  processingTierName?: string;
 }
 
 export const AppModals: React.FC<AppModalsProps> = ({
@@ -106,7 +109,12 @@ export const AppModals: React.FC<AppModalsProps> = ({
   whisperProgress,
   statusText,
   progressPercent,
+  onCancelProcessing,
+  processingTierName
 }) => {
+  const [isWhisperModalOpen, setIsWhisperModalOpen] = React.useState(false);
+  const [isPermissionsManageOpen, setIsPermissionsManageOpen] = React.useState(false);
+
   return (
     <>
       <Suspense fallback={null}>
@@ -117,6 +125,10 @@ export const AppModals: React.FC<AppModalsProps> = ({
             onClose={() => setIsSettingsOpen(false)}
             currentKey={apiKey}
             onSave={onSaveApiKey}
+            onOpenPermissions={() => {
+              setIsSettingsOpen(false);
+              setIsPermissionsManageOpen(true);
+            }}
           />
         )}
 
@@ -151,10 +163,20 @@ export const AppModals: React.FC<AppModalsProps> = ({
           />
         )}
 
+        {/* Permissions Management Modal (Opened from App Settings / Auto Assistant) */}
+        {isPermissionsManageOpen && (
+          <FloatingPermissionGuideModal 
+            isOpen={isPermissionsManageOpen}
+            mode="manage"
+            onClose={() => setIsPermissionsManageOpen(false)}
+          />
+        )}
+
         {/* Native YouTube Floating Overlay Permission Modal */}
         {isFloatingGuideOpen && (
           <FloatingPermissionGuideModal 
             isOpen={isFloatingGuideOpen}
+            mode="guide"
             onClose={() => setIsFloatingGuideOpen(false)}
             onLaunchFloating={async () => {
               if (videoId) {
@@ -177,7 +199,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
             onSelectWhisper={() => {
               if (!isWhisperDownloaded) {
                 setIsYtWhisperModalOpen(false);
-                setIsSettingsOpen(true);
+                setIsWhisperModalOpen(true);
                 return;
               }
               onStartYouTubeAudio('whisper');
@@ -201,7 +223,7 @@ export const AppModals: React.FC<AppModalsProps> = ({
               setIsChoiceModalOpen(false);
               setPendingLocalFile(null);
               if (!isWhisperDownloaded) {
-                setIsSettingsOpen(true);
+                setIsWhisperModalOpen(true);
                 return;
               }
               onStartLocalProcessing(f, 'whisper');
@@ -218,6 +240,14 @@ export const AppModals: React.FC<AppModalsProps> = ({
             }}
           />
         )}
+
+        {/* Whisper Offline Models Download & Management Modal */}
+        {isWhisperModalOpen && (
+          <WhisperModelsModal
+            isOpen={isWhisperModalOpen}
+            onClose={() => setIsWhisperModalOpen(false)}
+          />
+        )}
       </Suspense>
 
       {/* Audio Processing Indicator */}
@@ -225,9 +255,10 @@ export const AppModals: React.FC<AppModalsProps> = ({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
           <WhisperProcessingCard
             progress={whisperProgress}
-            tierName="Google Gemini AI"
+            tierName={processingTierName || (whisperProgress?.stage ? (activeWhisperTierName || 'Whisper AI') : 'Google Gemini AI')}
             fallbackText={statusText}
             fallbackPercent={progressPercent}
+            onCancel={onCancelProcessing}
           />
         </div>
       )}

@@ -6,6 +6,8 @@ export interface FloatingPermissionsStatus {
   notification: boolean;
   accessibility: boolean;
   allGranted: boolean;
+  postNotifications?: boolean;
+  batteryOptimization?: boolean;
 }
 
 export interface RawFloatingCue {
@@ -42,6 +44,9 @@ export interface FloatingSubtitlePlugin {
   requestOverlayPermission(): Promise<void>;
   requestNotificationAccess(): Promise<void>;
   requestAccessibility(): Promise<void>;
+  openAppSettings(): Promise<void>;
+  requestBatteryOptimization(): Promise<void>;
+  requestNotificationPermission(): Promise<void>;
   startOverlay(options?: { cues?: RawFloatingCue[]; videoId?: string }): Promise<{ started: boolean }>;
   stopOverlay(): Promise<{ stopped: boolean }>;
   loadCues(options: { cues: RawFloatingCue[] }): Promise<{ count: number }>;
@@ -77,12 +82,17 @@ export const FloatingSubtitle = registerPlugin<FloatingSubtitlePlugin>('Floating
         overlay: true,
         notification: true,
         accessibility: true,
-        allGranted: true
+        allGranted: true,
+        postNotifications: true,
+        batteryOptimization: true
       };
     },
     async requestOverlayPermission(): Promise<void> {},
     async requestNotificationAccess(): Promise<void> {},
     async requestAccessibility(): Promise<void> {},
+    async openAppSettings(): Promise<void> {},
+    async requestBatteryOptimization(): Promise<void> {},
+    async requestNotificationPermission(): Promise<void> {},
     async startOverlay(options?: { cues?: RawFloatingCue[]; videoId?: string }): Promise<{ started: boolean }> {
       mockRunning = true;
       if (options?.cues) {
@@ -165,7 +175,9 @@ export async function checkFloatingPermissions(): Promise<FloatingPermissionsSta
       overlay: true,
       notification: true,
       accessibility: true,
-      allGranted: true
+      allGranted: true,
+      postNotifications: true,
+      batteryOptimization: true
     };
   }
   return await FloatingSubtitle.checkPermissions();
@@ -184,6 +196,21 @@ export async function requestNotificationAccess(): Promise<void> {
 export async function requestAccessibility(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   await FloatingSubtitle.requestAccessibility();
+}
+
+export async function openAppSettings(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  await FloatingSubtitle.openAppSettings();
+}
+
+export async function requestBatteryOptimization(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  await FloatingSubtitle.requestBatteryOptimization();
+}
+
+export async function requestNotificationPermission(): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  await FloatingSubtitle.requestNotificationPermission();
 }
 
 export async function startFloatingOverlay(cues?: SubtitleCue[], videoId?: string): Promise<boolean> {

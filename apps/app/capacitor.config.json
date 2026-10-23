@@ -3,6 +3,7 @@
   "appName": "Lexiduo",
   "webDir": "dist",
   "bundledWebRuntime": false,
+  "backgroundColor": "#0B0F19",
   "server": {
     "androidScheme": "https"
   },

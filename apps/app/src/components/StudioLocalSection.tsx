@@ -48,6 +48,8 @@ export interface StudioLocalSectionProps {
   handleDeleteLocalItem: (e: React.MouseEvent, id: string) => void;
   handleClearLocalHistory: () => void;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onCancelProcessing?: () => void;
+  processingTierName?: string;
 }
 
 export const StudioLocalSection: React.FC<StudioLocalSectionProps> = ({
@@ -55,7 +57,7 @@ export const StudioLocalSection: React.FC<StudioLocalSectionProps> = ({
   whisperProgress,
   statusText,
   progressPercent,
-  activeModel: _activeModel,
+  activeModel,
   sourceLang,
   setSourceLang,
   languageOptions,
@@ -66,7 +68,9 @@ export const StudioLocalSection: React.FC<StudioLocalSectionProps> = ({
   historyLimit,
   handleDeleteLocalItem,
   handleClearLocalHistory,
-  fileInputRef
+  fileInputRef,
+  onCancelProcessing,
+  processingTierName
 }) => {
   const { t } = useTranslation();
 
@@ -103,9 +107,10 @@ export const StudioLocalSection: React.FC<StudioLocalSectionProps> = ({
         {isProcessingLocal ? (
           <WhisperProcessingCard
             progress={whisperProgress}
-            tierName="Google Gemini AI"
+            tierName={processingTierName || (activeModel?.name || 'Whisper AI')}
             fallbackText={statusText}
             fallbackPercent={progressPercent}
+            onCancel={onCancelProcessing}
           />
         ) : (
           <>

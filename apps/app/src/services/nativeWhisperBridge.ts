@@ -47,7 +47,7 @@ export interface NativeWhisperPlugin {
   extractAudio(options: { videoUri: string }): Promise<NativeAudioExtractionResult>;
   saveAudioBuffer(options: { base64: string }): Promise<{ audioPath: string; sizeBytes: number }>;
   isModelDownloaded(options: { tierId: string }): Promise<{ isDownloaded: boolean; sizeBytes: number; tierId: string }>;
-  downloadModelTier(options: { tierId: string }): Promise<{ success: boolean; tierId: string; modelPath: string }>;
+  downloadModelTier(options: { tierId: string; preferGgml?: boolean }): Promise<{ success: boolean; tierId: string; modelPath: string }>;
   deleteModelTier(options: { tierId: string }): Promise<{ deleted: boolean; tierId: string }>;
   transcribe(options: {
     audioPath?: string;
@@ -319,7 +319,8 @@ export async function isNativeModelDownloaded(tierId: string): Promise<{ isDownl
  */
 export async function downloadNativeModelTier(
   tierId: string,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  preferGgml: boolean = true
 ): Promise<boolean> {
   if (!isNativeWhisperAvailable()) {
     return false;
@@ -341,7 +342,7 @@ export async function downloadNativeModelTier(
   }
 
   try {
-    const res = await NativeWhisper.downloadModelTier({ tierId });
+    const res = await NativeWhisper.downloadModelTier({ tierId, preferGgml });
     return res.success;
   } catch (err) {
     console.error('[NativeWhisper] downloadModelTier failed:', err);

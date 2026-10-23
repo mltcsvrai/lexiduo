@@ -1,6 +1,7 @@
 import type { SubtitleCue } from '../types';
 import { translateTextSecure } from './translationService';
 import { translateWithGeminiAI } from './transcriptService';
+import { downloadBlobAsFile, type DownloadFileResult } from './blobDownloadHelper';
 
 export type SubtitleExportMode = 'source' | 'target' | 'dual';
 
@@ -384,57 +385,14 @@ export async function batchTranslateCues(
 }
 
 /**
- * Triggers client-side browser or WebView download for a subtitle text file (.srt or .vtt).
+ * Triggers client-side browser or native MediaStore download for a subtitle text file (.srt or .vtt).
+ * Delegates to downloadBlobAsFile to ensure files are placed in Download/Lexiduo on Android.
  */
 export async function downloadSubtitleFile(
   content: string,
   filename: string,
   mimeType: string = 'text/plain;charset=utf-8'
-): Promise<void> {
-  const isNative = typeof window !== 'undefined' &&
-    typeof (window as any).Capacitor !== 'undefined' &&
-    Boolean((window as any).Capacitor.isNativePlatform?.());
-
-  if (isNative) {
-    try {
-      const { Filesystem, Directory } = await import('@capacitor/filesystem');
-      try {
-        await Filesystem.writeFile({
-          path: `Download/${filename}`,
-          data: content,
-          directory: Directory.ExternalStorage,
-          recursive: true
-        });
-        return;
-      } catch {
-        try {
-          await Filesystem.writeFile({
-            path: filename,
-            data: content,
-            directory: Directory.Documents,
-            recursive: true
-          });
-          return;
-        } catch {}
-      }
-    } catch (fsErr) {
-      console.warn('Native filesystem write for subtitles fallback to blob:', fsErr);
-    }
-  }
-
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
-
+): Promise<DownloadFileResult> {
   const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.style.display = 'none';
-  document.body.appendChild(a);
-  a.click();
-
-  setTimeout(() => {
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, 1000);
+  return await downloadBlobAsFile(blob, filename);
 }

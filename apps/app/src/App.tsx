@@ -4,12 +4,12 @@ import { get, set } from 'idb-keyval';
 import { Clipboard } from '@capacitor/clipboard';
 import { App as CapApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
-import { isNativeWhisperAvailable } from './services/nativeWhisperBridge';
+import { isNativeWhisperAvailable, cancelNativeTranscription } from './services/nativeWhisperBridge';
 import { 
   SubtitleOverlay, WordDrawer, InteractiveTranscriptPanel, YouTubePlayer, 
   TopSearchOverlay, HistoryModal, fetchVideoSubtitles, extractYouTubeId, fetchYouTubeMetadata, 
   cacheVideoTitle, listenToSharedLinks, uriToFile, useTranslation, useAppStore, FloatingDock, 
-  checkFloatingPermissions, startFloatingOverlay, withBackgroundTask, 
+  checkFloatingPermissions, startFloatingOverlay, withBackgroundTask, loadFloatingCues,
   persistApiKey, STORAGE_KEYS, getCompatItem, setCompatItem, loadAppPreferences,
   type YouTubePlayerHandle, type HistoryItem, type SubtitleCue 
 } from '@lexiduo/core';
@@ -43,6 +43,8 @@ export function App() {
 
   const [pendingLocalFile, setPendingLocalFile] = useState<File | null>(null);
   const { activeWhisperTierName, isWhisperDownloaded, refreshStatus: refreshWhisperStatus } = useActiveWhisperTier();
+  const [processingEngine, setProcessingEngine] = useState<'whisper' | 'gemini'>('whisper');
+  const activeProcessingTierName = processingEngine === 'gemini' ? 'Google Gemini AI' : (activeWhisperTierName || 'Whisper AI');
   const [isYtWhisperModalOpen, setIsYtWhisperModalOpen] = useState(false);
   const [ytVideoTitle, setYtVideoTitle] = useState('');
 
@@ -96,6 +98,7 @@ export function App() {
       if (!perms.overlay) {
         setIsFloatingGuideOpen(true);
       } else {
+        ytPlayerRef.current?.pauseVideo?.();
         await startFloatingOverlay(cues, videoId);
       }
     } catch {
@@ -109,7 +112,6 @@ export function App() {
       try {
         const prefs = await loadAppPreferences();
         if (prefs.apiKey) setApiKey(prefs.apiKey);
-        if (prefs.videoId) setVideoId(prefs.videoId);
         if (prefs.sourceLang) setSourceLang(prefs.sourceLang);
         if (prefs.targetLang) setTargetLang(prefs.targetLang);
         else setTargetLang('tr');
@@ -305,6 +307,7 @@ export function App() {
           if (isMounted && activeRequestRef.current === currentRequest) {
             clearTimeout(toleranceTimer);
             setCues(fastCues);
+            loadFloatingCues(fastCues).catch(() => {});
             setIsYtWhisperModalOpen(false);
             setLoadingSubtitles(false);
           }
@@ -312,6 +315,7 @@ export function App() {
         if (isMounted && activeRequestRef.current === currentRequest && result.cues.length > 0) {
           clearTimeout(toleranceTimer);
           setCues(result.cues);
+          loadFloatingCues(result.cues).catch(() => {});
           setIsYtWhisperModalOpen(false);
         }
       } catch (err) {
@@ -391,16 +395,20 @@ export function App() {
       console.warn('Failed to read cached cues:', err);
     }
 
-    if (apiKey && apiKey.trim().length > 10) {
-      startLocalProcessing(file, 'gemini');
-      return;
-    }
-
     setPendingLocalFile(file);
     setIsChoiceModalOpen(true);
   };
 
+  const handleCancelProcessing = useCallback(() => {
+    cancelNativeTranscription().catch(console.warn);
+    setIsProcessing(false);
+    setStatusText('');
+    setProgressPercent(0);
+    setWhisperProgress(null);
+  }, []);
+
   const startLocalProcessing = async (file: File, engine: 'whisper' | 'gemini', customApiKey?: string) => {
+    setProcessingEngine(engine);
     setIsProcessing(true);
     const effectiveKey = customApiKey || apiKey;
     if (customApiKey && customApiKey.trim() && customApiKey.trim() !== apiKey) {
@@ -455,6 +463,7 @@ export function App() {
 
   const handleStartYouTubeAudio = async (engine: 'whisper' | 'gemini' = 'whisper', customApiKey?: string) => {
     if (!videoId) return;
+    setProcessingEngine(engine);
     setIsYtWhisperModalOpen(false);
     setLoadingSubtitles(false);
     setIsProcessing(true);
@@ -626,6 +635,8 @@ export function App() {
               statusText={statusText}
               progressPercent={progressPercent}
               onOpenPermissionGuide={() => setIsFloatingGuideOpen(true)}
+              onCancelProcessing={handleCancelProcessing}
+              processingTierName={activeProcessingTierName}
             />
           </div>
         ) : (
@@ -762,6 +773,8 @@ export function App() {
         isYtPlaybackChoiceOpen={isYtPlaybackChoiceOpen} pendingYtVideo={pendingYtVideo} isPreparingYtFloatingSubtitles={isPreparingYtFloatingSubtitles}
         onConfirmStayInApp={handleConfirmStayInApp} onConfirmContinueOnYouTube={handleConfirmContinueOnYouTube} onCloseYtChoiceModal={handleCloseYtChoiceModal}
         isProcessing={isProcessing} whisperProgress={whisperProgress} statusText={statusText} progressPercent={progressPercent}
+        onCancelProcessing={handleCancelProcessing}
+        processingTierName={activeProcessingTierName}
       />
     </div>
   );

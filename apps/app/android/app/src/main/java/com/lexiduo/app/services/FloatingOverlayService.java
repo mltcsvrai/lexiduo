@@ -39,7 +39,7 @@ public class FloatingOverlayService extends Service {
     private static final String CHANNEL_ID = FloatingOverlayNotificationHelper.CHANNEL_ID;
     private static final int NOTIFICATION_ID = 1001;
     private static final long TICK_INTERVAL_MS = 100L;
-    private static final long DRIFT_THRESHOLD_MS = 120L;
+    private static final long DRIFT_THRESHOLD_MS = 1000L;
     private static final long PINNED_PROTECTION_DURATION_MS = 25000L;
 
     private static volatile FloatingOverlayService sInstance = null;
@@ -51,6 +51,10 @@ public class FloatingOverlayService extends Service {
     private static Float sCustomBgOpacity = null, sCustomFontSize = null;
     private static Boolean sShowBackground = true;
     private static String sBgWidthMode = "dynamic";
+    private static String sSubtitleMode = "DUAL";
+    private static String sFontFamily = "sans";
+    private static String sFontWeight = "normal";
+    private static String sTextOutline = "none";
 
     private WindowManager windowManager;
     private View overlayView;
@@ -291,10 +295,26 @@ public class FloatingOverlayService extends Service {
     }
 
     public static void updateStyle(String sourceColor, String targetColor, String bgColor, Double bgOpacity, Double fontSize) {
-        updateStyle(sourceColor, targetColor, bgColor, bgOpacity, fontSize, null, null);
+        updateStyle(sourceColor, targetColor, bgColor, bgOpacity, fontSize, null, null, null, null, null, null);
     }
 
     public static void updateStyle(String sourceColor, String targetColor, String bgColor, Double bgOpacity, Double fontSize, Boolean showBg, String bgWidth) {
+        updateStyle(sourceColor, targetColor, bgColor, bgOpacity, fontSize, showBg, bgWidth, null, null, null, null);
+    }
+
+    public static void updateStyle(
+            String sourceColor,
+            String targetColor,
+            String bgColor,
+            Double bgOpacity,
+            Double fontSize,
+            Boolean showBg,
+            String bgWidth,
+            String subtitleMode,
+            String fontFamily,
+            String fontWeight,
+            String textOutline
+    ) {
         try {
             if (sourceColor != null && !sourceColor.trim().isEmpty()) sCustomSourceColor = android.graphics.Color.parseColor(sourceColor.trim());
             if (targetColor != null && !targetColor.trim().isEmpty()) sCustomTargetColor = android.graphics.Color.parseColor(targetColor.trim());
@@ -303,6 +323,10 @@ public class FloatingOverlayService extends Service {
             if (fontSize != null) sCustomFontSize = fontSize.floatValue();
             if (showBg != null) sShowBackground = showBg;
             if (bgWidth != null && !bgWidth.trim().isEmpty()) sBgWidthMode = bgWidth.trim();
+            if (subtitleMode != null && !subtitleMode.trim().isEmpty()) sSubtitleMode = subtitleMode.trim();
+            if (fontFamily != null && !fontFamily.trim().isEmpty()) sFontFamily = fontFamily.trim();
+            if (fontWeight != null && !fontWeight.trim().isEmpty()) sFontWeight = fontWeight.trim();
+            if (textOutline != null && !textOutline.trim().isEmpty()) sTextOutline = textOutline.trim();
         } catch (Exception e) {
             Log.w(TAG, "Failed parsing custom style colors", e);
         }
@@ -397,14 +421,13 @@ public class FloatingOverlayService extends Service {
                 if (hasLangs) tvLangBadge.setText(srcLang.toUpperCase() + " ➔ " + dstLang.toUpperCase());
             }
             if (cuesList.isEmpty()) {
-                if (tvTargetSubtitle != null) {
-                    tvTargetSubtitle.setTextColor(0xFF80D8FF);
-                    tvTargetSubtitle.setText(getString(R.string.overlay_subtitles_loading) + autoLoadingTitle);
-                }
-                if (tvSourceSubtitle != null) {
-                    tvSourceSubtitle.setText("");
-                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
-                }
+                FloatingOverlayStyleHelper.renderWaitingOrLoading(
+                        tvSourceSubtitle,
+                        tvTargetSubtitle,
+                        getString(R.string.overlay_subtitles_loading) + autoLoadingTitle,
+                        true,
+                        sSubtitleMode
+                );
             } else {
                 updateUiForCurrentTime();
             }
@@ -442,11 +465,13 @@ public class FloatingOverlayService extends Service {
         }
         mainHandler.post(() -> {
             FloatingOverlayStyleHelper.setViewVisible(aiFallbackLayout, false);
-            if (tvTargetSubtitle != null) tvTargetSubtitle.setText("");
-            if (tvSourceSubtitle != null) {
-                tvSourceSubtitle.setText("");
-                FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
-            }
+            FloatingOverlayStyleHelper.renderWaitingOrLoading(
+                    tvSourceSubtitle,
+                    tvTargetSubtitle,
+                    "",
+                    false,
+                    sSubtitleMode
+            );
             updateUiForCurrentTime();
         });
     }
@@ -503,11 +528,11 @@ public class FloatingOverlayService extends Service {
         bubbleContainer = overlayView.findViewById(R.id.bubble_container);
         tvTargetSubtitle = overlayView.findViewById(R.id.tv_target_subtitle);
         tvSourceSubtitle = overlayView.findViewById(R.id.tv_source_subtitle);
-        tvLangBadge = overlayView.findViewById(R.id.tv_lang_badge);
+        tvLangBadge = findViewOptional("tv_lang_badge");
         aiFallbackLayout = overlayView.findViewById(R.id.ai_fallback_layout);
-        statusIndicator = overlayView.findViewById(R.id.status_indicator);
+        statusIndicator = findViewOptional("status_indicator");
         contentContainer = overlayView.findViewById(R.id.content_container);
-        btnBubble = overlayView.findViewById(R.id.btn_bubble);
+        btnBubble = findViewOptional("btn_bubble");
         View btnClose = overlayView.findViewById(R.id.btn_close);
 
         if (aiFallbackLayout != null) {
@@ -536,8 +561,8 @@ public class FloatingOverlayService extends Service {
         }
         if (btnBubble != null) btnBubble.setOnClickListener(v -> toggleBubbleMode());
 
-        // Apply scale & padding
-        applyScaleUi();
+        // Apply custom style & scale
+        applyCustomStyle();
 
         // Drag & Scale via OverlayTouchHandler (VSYNC-buffered, pointer-aware, edge snapping)
         overlayTouchHandler = new OverlayTouchHandler(overlayView, windowParams, windowManager, factor -> {
@@ -597,8 +622,8 @@ public class FloatingOverlayService extends Service {
     private void applyScaleUi() {
         FloatingOverlayStyleHelper.applyScaleAndDimensions(
                 this,
-                tvTargetSubtitle,
                 tvSourceSubtitle,
+                tvTargetSubtitle,
                 cardContainer,
                 windowParams,
                 windowManager,
@@ -607,7 +632,8 @@ public class FloatingOverlayService extends Service {
                 currentScale,
                 sCustomFontSize,
                 sBgWidthMode,
-                isBubbleMode
+                isBubbleMode,
+                sSubtitleMode
         );
         if (windowParams != null) {
             savedCardWidth = windowParams.width;
@@ -625,14 +651,13 @@ public class FloatingOverlayService extends Service {
         // Ad Active Case
         if (isAdActive) {
             if (statusIndicator != null) statusIndicator.setBackgroundResource(R.drawable.bg_status_dot_ad);
-            if (tvTargetSubtitle != null) {
-                tvTargetSubtitle.setTextColor(0xFFFFFFFF);
-                tvTargetSubtitle.setText(getString(R.string.overlay_ad_frozen));
-            }
-            if (tvSourceSubtitle != null) {
-                tvSourceSubtitle.setText(getString(R.string.overlay_ad_waiting));
-                FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, true);
-            }
+            FloatingOverlayStyleHelper.renderAdActive(
+                    tvSourceSubtitle,
+                    tvTargetSubtitle,
+                    getString(R.string.overlay_ad_waiting),
+                    getString(R.string.overlay_ad_frozen),
+                    sSubtitleMode
+            );
             return;
         }
 
@@ -644,23 +669,22 @@ public class FloatingOverlayService extends Service {
         }
 
         if (cuesList.isEmpty()) {
-            if (tvTargetSubtitle != null) {
-                if (isAutoLoading) {
-                    tvTargetSubtitle.setTextColor(0xFF80D8FF);
-                    tvTargetSubtitle.setText(getString(R.string.overlay_subtitles_loading) + autoLoadingTitle);
-                } else if (AutoYouTubeDetector.getInstance().isAutoModeEnabled()
-                        && AutoYouTubeDetector.getInstance().getCurrentVideoTitle() != null) {
-                    tvTargetSubtitle.setTextColor(0xFF9E9E9E);
-                    tvTargetSubtitle.setText("● " + AutoYouTubeDetector.getInstance().getCurrentVideoTitle());
-                } else {
-                    tvTargetSubtitle.setTextColor(0xFF9E9E9E);
-                    tvTargetSubtitle.setText(getString(R.string.overlay_waiting_subtitles));
-                }
+            String loadingOrWaiting;
+            if (isAutoLoading) {
+                loadingOrWaiting = getString(R.string.overlay_subtitles_loading) + autoLoadingTitle;
+            } else if (AutoYouTubeDetector.getInstance().isAutoModeEnabled()
+                    && AutoYouTubeDetector.getInstance().getCurrentVideoTitle() != null) {
+                loadingOrWaiting = "● " + AutoYouTubeDetector.getInstance().getCurrentVideoTitle();
+            } else {
+                loadingOrWaiting = getString(R.string.overlay_waiting_subtitles);
             }
-            if (tvSourceSubtitle != null) {
-                tvSourceSubtitle.setText("");
-                FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
-            }
+            FloatingOverlayStyleHelper.renderWaitingOrLoading(
+                    tvSourceSubtitle,
+                    tvTargetSubtitle,
+                    loadingOrWaiting,
+                    isAutoLoading,
+                    sSubtitleMode
+            );
             return;
         }
 
@@ -670,84 +694,53 @@ public class FloatingOverlayService extends Service {
         if (activeCue != null) {
             String target = activeCue.targetText;
             String source = activeCue.sourceText;
-
-            boolean hasTarget = !target.isEmpty();
-            boolean hasSource = !source.isEmpty();
-            boolean isIdentical = target.equalsIgnoreCase(source);
-
             String currentSrcLang = AutoYouTubeDetector.getInstance().getSourceLang();
             String currentDstLang = AutoYouTubeDetector.getInstance().getTargetLang();
             boolean expectTranslation = currentDstLang != null && !currentDstLang.equalsIgnoreCase(currentSrcLang);
 
-            if (!hasTarget && hasSource) {
-                // In-flight translation: show source subtitle immediately in primary slot
-                if (tvTargetSubtitle != null) {
-                    tvTargetSubtitle.setTextColor(sCustomTargetColor != null ? sCustomTargetColor : 0xFFFFFFFF);
-                    tvTargetSubtitle.setText(source);
-                }
-                if (tvSourceSubtitle != null) {
-                    tvSourceSubtitle.setTextColor(0xFF80D8FF);
-                    tvSourceSubtitle.setText(getString(R.string.overlay_subtitles_translating));
-                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, true);
-                }
-            } else if (hasTarget && hasSource && (!isIdentical || !expectTranslation)) {
-                // Bilingual: translated target in primary, original source in secondary
-                if (tvTargetSubtitle != null) {
-                    tvTargetSubtitle.setTextColor(sCustomTargetColor != null ? sCustomTargetColor : 0xFFFFFFFF);
-                    tvTargetSubtitle.setText(target);
-                }
-                if (tvSourceSubtitle != null) {
-                    tvSourceSubtitle.setTextColor(sCustomSourceColor != null ? sCustomSourceColor : 0xFFB0BEC5);
-                    tvSourceSubtitle.setText(source);
-                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, true);
-                }
-            } else if (hasTarget && hasSource && isIdentical && expectTranslation) {
-                // Untranslated identical fallback: keep source visible, show translating badge
-                if (tvTargetSubtitle != null) {
-                    tvTargetSubtitle.setTextColor(sCustomTargetColor != null ? sCustomTargetColor : 0xFFFFFFFF);
-                    tvTargetSubtitle.setText(source);
-                }
-                if (tvSourceSubtitle != null) {
-                    tvSourceSubtitle.setTextColor(0xFF80D8FF);
-                    tvSourceSubtitle.setText(getString(R.string.overlay_subtitles_translating));
-                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, true);
-                }
-            } else {
-                String singleText = hasTarget ? target : source;
-                if (tvTargetSubtitle != null) {
-                    tvTargetSubtitle.setTextColor(sCustomTargetColor != null ? sCustomTargetColor : 0xFFFFFFFF);
-                    tvTargetSubtitle.setText(singleText);
-                }
-                if (tvSourceSubtitle != null) {
-                    tvSourceSubtitle.setText("");
-                    FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
-                }
-            }
+            FloatingOverlayStyleHelper.renderActiveCue(
+                    tvSourceSubtitle,
+                    tvTargetSubtitle,
+                    source,
+                    target,
+                    expectTranslation,
+                    getString(R.string.overlay_subtitles_translating),
+                    sSubtitleMode,
+                    sCustomSourceColor,
+                    sCustomTargetColor
+            );
             FloatingOverlayStyleHelper.setViewVisible(aiFallbackLayout, false);
         } else {
-            if (tvTargetSubtitle != null) {
-                tvTargetSubtitle.setTextColor(0xFF9E9E9E);
-                tvTargetSubtitle.setText(getString(isPlaying ? R.string.overlay_waiting_speech : R.string.overlay_paused));
-            }
-            if (tvSourceSubtitle != null) {
-                tvSourceSubtitle.setText("");
-                FloatingOverlayStyleHelper.setViewVisible(tvSourceSubtitle, false);
-            }
+            String speechWaiting = getString(isPlaying ? R.string.overlay_waiting_speech : R.string.overlay_paused);
+            FloatingOverlayStyleHelper.renderWaitingSpeech(
+                    tvSourceSubtitle,
+                    tvTargetSubtitle,
+                    speechWaiting,
+                    sSubtitleMode
+            );
         }
     }
 
     private void applyCustomStyle() {
         FloatingOverlayStyleHelper.applyCustomColorsAndBackground(
-                tvTargetSubtitle,
                 tvSourceSubtitle,
+                tvTargetSubtitle,
                 cardContainer,
-                sCustomTargetColor,
                 sCustomSourceColor,
+                sCustomTargetColor,
                 sShowBackground,
                 sCustomBgColor,
                 sCustomBgOpacity
         );
+        FloatingOverlayStyleHelper.applyCustomTypography(
+                tvSourceSubtitle,
+                tvTargetSubtitle,
+                sFontFamily,
+                sFontWeight,
+                sTextOutline
+        );
         applyScaleUi();
+        updateUiForCurrentTime();
     }
 
     private void removeOverlayView() {
@@ -758,6 +751,17 @@ public class FloatingOverlayService extends Service {
                 Log.e(TAG, "Error removing overlay view", e);
             }
             overlayView = null;
+        }
+    }
+
+    @Nullable
+    @SuppressWarnings("unchecked")
+    private <T extends View> T findViewOptional(String idName) {
+        try {
+            int id = getResources().getIdentifier(idName, "id", getPackageName());
+            return (id != 0 && overlayView != null) ? (T) overlayView.findViewById(id) : null;
+        } catch (Exception ignored) {
+            return null;
         }
     }
 

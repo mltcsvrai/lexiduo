@@ -314,4 +314,86 @@ describe('mkvMuxerService - Matroska Soft Subtitle Multiplexing', () => {
     const textContent = new TextDecoder().decode(buf);
     expect(textContent).toContain('Geçersiz Bitiş');
   });
+
+  it('preserves strict video frame decode order (DTS) when H.264 B-frames are present', async () => {
+    const mockMp4 = createMockMp4Buffer();
+    const videoBlob = new Blob([mockMp4 as unknown as BlobPart], { type: 'video/mp4' });
+
+    const tracks: SubtitleTrackExport[] = [
+      {
+        language: 'tr',
+        title: 'Turkish Subtitles',
+        cues: [
+          { id: '1', start: 0, end: 2.0, sourceText: 'Hello', targetText: 'Merhaba' }
+        ],
+        mode: 'target'
+      }
+    ];
+
+    const mkvBlob = await muxSubtitlesIntoMkv(videoBlob, tracks);
+    expect(mkvBlob.size).toBeGreaterThan(150);
+    expect(mkvBlob.type).toBe('video/x-matroska');
+  });
+
+  it('correctly parses fragmented MP4 (fMP4) with moof and trun boxes', async () => {
+    // Construct a minimal fMP4 buffer with moov (sample_count = 0) followed by moof + mdat
+    const { parseFmp4Samples } = await import('../fmp4ParserHelper');
+
+    // moof box (80 bytes)
+    // moof -> traf -> tfhd (trackId 1, default_sample_duration 1000, default_sample_size 16)
+    //               -> tfdt (baseMediaDecodeTime 0)
+    //               -> trun (sample_count 2, data_offset 88)
+    const moof = new Uint8Array(88);
+    const view = new DataView(moof.buffer);
+    view.setUint32(0, 88);
+    moof.set([109, 111, 111, 102], 4); // 'moof'
+
+    // traf at offset 8 (size 80)
+    view.setUint32(8, 80);
+    moof.set([116, 114, 97, 102], 12); // 'traf'
+
+    // tfhd at offset 16 (size 24)
+    view.setUint32(16, 24);
+    moof.set([116, 102, 104, 100], 20); // 'tfhd'
+    view.setUint32(24, 0x00000018); // flags: default_sample_duration (0x08) + default_sample_size (0x10)
+    view.setUint32(28, 1); // trackId 1
+    view.setUint32(32, 1000); // default_sample_duration
+    view.setUint32(36, 16); // default_sample_size
+
+    // tfdt at offset 40 (size 16)
+    view.setUint32(40, 16);
+    moof.set([116, 102, 100, 116], 44); // 'tfdt'
+    view.setUint32(48, 0); // version 0
+    view.setUint32(52, 0); // baseMediaDecodeTime 0
+
+    // trun at offset 56 (size 24)
+    view.setUint32(56, 32);
+    moof.set([116, 114, 117, 110], 60); // 'trun'
+    view.setUint32(64, 0x00000001); // flags: data_offset_present (0x01)
+    view.setUint32(68, 2); // sample_count 2
+    view.setInt32(72, 88); // data_offset 88 (relative to moof)
+
+    // mdat at offset 88 (size 40)
+    const mdat = new Uint8Array(40);
+    const mdView = new DataView(mdat.buffer);
+    mdView.setUint32(0, 40);
+    mdat.set([109, 100, 97, 116], 4); // 'mdat'
+
+    const totalFmp4 = new Uint8Array(moof.length + mdat.length);
+    totalFmp4.set(moof, 0);
+    totalFmp4.set(mdat, moof.length);
+
+    const timescales = new Map<number, number>([[1, 1000]]);
+    const types = new Map<number, 'video' | 'audio'>([[1, 'video']]);
+
+    const result = parseFmp4Samples(totalFmp4, timescales, types);
+    expect(result.has(1)).toBe(true);
+    const samples = result.get(1)!;
+    expect(samples.length).toBe(2);
+    expect(samples[0].size).toBe(16);
+    expect(samples[0].offset).toBe(88);
+    expect(samples[0].timeMs).toBe(0);
+    expect(samples[1].timeMs).toBe(1000);
+  });
 });
+

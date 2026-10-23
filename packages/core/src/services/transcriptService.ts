@@ -180,7 +180,9 @@ export async function fetchVideoSubtitles(
           `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/api/timedtext?v=${videoId}&lang=de&fmt=srv3`)}`
         ]
       : [
-          `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/api/timedtext?v=${videoId}&lang=${sourceLang}&fmt=srv3`)}`
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/api/timedtext?v=${videoId}&lang=${sourceLang}&fmt=srv3`)}`,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=srv3`)}`,
+          `https://api.allorigins.win/raw?url=${encodeURIComponent(`https://www.youtube.com/api/timedtext?v=${videoId}&lang=tr&fmt=srv3`)}`
         ];
 
     for (const url of proxyUrls) {

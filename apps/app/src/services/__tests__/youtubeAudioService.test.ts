@@ -290,27 +290,9 @@ describe('youtubeAudioService', () => {
       };
 
       try {
-        vi.spyOn(coreModule, 'smartFetch')
-          .mockResolvedValueOnce({
-            ok: true,
-            status: 200,
-            text: async () => '"INNERTUBE_API_KEY":"test_key_123"',
-            json: async () => ({}),
-            arrayBuffer: async () => new ArrayBuffer(0),
-          })
-          .mockResolvedValueOnce({
-            ok: true,
-            status: 200,
-            text: async () => '',
-            json: async () => ({
-              streamingData: {
-                adaptiveFormats: [
-                  { itag: 140, mimeType: 'audio/mp4', url: 'https://cdn.googlevideo.com/stream140' },
-                ],
-              },
-            }),
-            arrayBuffer: async () => new ArrayBuffer(0),
-          });
+        vi.spyOn(coreModule, 'resolveYouTubeStreams').mockResolvedValueOnce([
+          { itag: 140, mimeType: 'audio/mp4', url: 'https://cdn.googlevideo.com/stream140', hasAudio: true, hasVideo: false },
+        ]);
 
         const fetchMock = vi.fn().mockResolvedValue({
           ok: true,
@@ -339,7 +321,7 @@ describe('youtubeAudioService', () => {
       };
 
       try {
-        vi.spyOn(coreModule, 'smartFetch').mockRejectedValue(new Error('InnerTube block'));
+        vi.spyOn(coreModule, 'resolveYouTubeStreams').mockRejectedValue(new Error('InnerTube block'));
 
         const fetchMock = vi.fn().mockResolvedValue({
           ok: true,
@@ -428,29 +410,11 @@ describe('youtubeAudioService', () => {
   });
 
   describe('extractDirectClientAudioUrl', () => {
-    it('successfully extracts direct audio format (itag 140) from InnerTube player', async () => {
-      vi.spyOn(coreModule, 'smartFetch')
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          text: async () => '<html>"INNERTUBE_API_KEY":"AIzaSyMockKey123"</html>',
-          json: async () => ({}),
-          arrayBuffer: async () => new ArrayBuffer(0),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          text: async () => '',
-          json: async () => ({
-            streamingData: {
-              adaptiveFormats: [
-                { itag: 251, mimeType: 'audio/webm; codecs="opus"', url: 'https://cdn.googlevideo.com/251' },
-                { itag: 140, mimeType: 'audio/mp4; codecs="mp4a.40.2"', url: 'https://cdn.googlevideo.com/140', bitrate: 130000 },
-              ],
-            },
-          }),
-          arrayBuffer: async () => new ArrayBuffer(0),
-        });
+    it('successfully extracts direct audio format (itag 140) from resolved streams', async () => {
+      vi.spyOn(coreModule, 'resolveYouTubeStreams').mockResolvedValueOnce([
+        { itag: 251, mimeType: 'audio/webm; codecs="opus"', url: 'https://cdn.googlevideo.com/251', hasAudio: true, hasVideo: false },
+        { itag: 140, mimeType: 'audio/mp4; codecs="mp4a.40.2"', url: 'https://cdn.googlevideo.com/140', bitrate: 130000, hasAudio: true, hasVideo: false },
+      ]);
 
       const result = await extractDirectClientAudioUrl('dQw4w9WgXcQ');
       expect(result.url).toBe('https://cdn.googlevideo.com/140');
@@ -462,42 +426,20 @@ describe('youtubeAudioService', () => {
       await expect(extractDirectClientAudioUrl('invalid-id!')).rejects.toThrow('Invalid YouTube videoId format');
     });
 
-    it('throws error when API key cannot be found on watch page', async () => {
-      vi.spyOn(coreModule, 'smartFetch').mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        text: async () => '<html>No key here</html>',
-        json: async () => ({}),
-        arrayBuffer: async () => new ArrayBuffer(0),
-      });
+    it('propagates error when resolveYouTubeStreams fails', async () => {
+      vi.spyOn(coreModule, 'resolveYouTubeStreams').mockRejectedValueOnce(
+        new Error('Failed to resolve streams: InnerTube error')
+      );
 
       await expect(extractDirectClientAudioUrl('dQw4w9WgXcQ')).rejects.toThrow(
-        'Failed to extract InnerTube API key from YouTube page'
+        'Failed to resolve streams: InnerTube error'
       );
     });
 
     it('throws error when no streamable formats with url are present in player response', async () => {
-      vi.spyOn(coreModule, 'smartFetch')
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          text: async () => '"INNERTUBE_API_KEY":"AIzaSyMockKey123"',
-          json: async () => ({}),
-          arrayBuffer: async () => new ArrayBuffer(0),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          text: async () => '',
-          json: async () => ({
-            streamingData: {
-              adaptiveFormats: [
-                { itag: 251, mimeType: 'audio/webm', signatureCipher: 's=abc' },
-              ],
-            },
-          }),
-          arrayBuffer: async () => new ArrayBuffer(0),
-        });
+      vi.spyOn(coreModule, 'resolveYouTubeStreams').mockResolvedValueOnce([
+        { itag: 251, mimeType: 'audio/webm', url: '', hasAudio: true, hasVideo: false },
+      ]);
 
       await expect(extractDirectClientAudioUrl('dQw4w9WgXcQ')).rejects.toThrow(
         'No direct streamable audio format found in InnerTube response'
@@ -509,27 +451,9 @@ describe('youtubeAudioService', () => {
     it('downloads stream directly and returns Blob', async () => {
       const mockBlob = new Blob([new Uint8Array([7, 8])], { type: 'audio/mp4' });
 
-      vi.spyOn(coreModule, 'smartFetch')
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          text: async () => '"INNERTUBE_API_KEY":"AIzaSyMockKey123"',
-          json: async () => ({}),
-          arrayBuffer: async () => new ArrayBuffer(0),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          text: async () => '',
-          json: async () => ({
-            streamingData: {
-              adaptiveFormats: [
-                { itag: 140, mimeType: 'audio/mp4', url: 'https://cdn.googlevideo.com/audio140' },
-              ],
-            },
-          }),
-          arrayBuffer: async () => new ArrayBuffer(0),
-        });
+      vi.spyOn(coreModule, 'resolveYouTubeStreams').mockResolvedValueOnce([
+        { itag: 140, mimeType: 'audio/mp4', url: 'https://cdn.googlevideo.com/audio140', hasAudio: true, hasVideo: false },
+      ]);
 
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -546,27 +470,9 @@ describe('youtubeAudioService', () => {
     });
 
     it('throws error when download response is not ok', async () => {
-      vi.spyOn(coreModule, 'smartFetch')
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          text: async () => '"INNERTUBE_API_KEY":"AIzaSyMockKey123"',
-          json: async () => ({}),
-          arrayBuffer: async () => new ArrayBuffer(0),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          text: async () => '',
-          json: async () => ({
-            streamingData: {
-              adaptiveFormats: [
-                { itag: 140, mimeType: 'audio/mp4', url: 'https://cdn.googlevideo.com/audio140' },
-              ],
-            },
-          }),
-          arrayBuffer: async () => new ArrayBuffer(0),
-        });
+      vi.spyOn(coreModule, 'resolveYouTubeStreams').mockResolvedValueOnce([
+        { itag: 140, mimeType: 'audio/mp4', url: 'https://cdn.googlevideo.com/audio140', hasAudio: true, hasVideo: false },
+      ]);
 
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: false,

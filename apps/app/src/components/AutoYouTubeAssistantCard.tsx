@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { Sparkles, ExternalLink, Play, Radio, CheckCircle2 } from 'lucide-react';
+import { Sparkles, ExternalLink, Play, Radio, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { useTranslation, useAppStore } from '@lexiduo/core';
 import { useAutoYouTubeAssistant } from '../hooks/useAutoYouTubeAssistant';
 
@@ -88,6 +88,18 @@ export const AutoYouTubeAssistantCard: React.FC<AutoYouTubeAssistantCardProps> =
                   </>
                 )}
               </span>
+
+              {onOpenPermissionGuide && (
+                <button
+                  type="button"
+                  onClick={onOpenPermissionGuide}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 ml-2 rounded-full text-[10px] font-semibold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer active:scale-95"
+                  title={t('systemPermissionsTitle')}
+                >
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  <span>{t('manage')}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
