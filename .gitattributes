@@ -1,0 +1,4 @@
+# GitHub Linguist Overrides
+# Mark native C/C++ Whisper & GGML engines as vendored so repository language stats focus on Lexiduo application code
+apps/app/android/app/src/main/cpp/** linguist-vendored
+apps/app/android/app/src/main/cpp/** linguist-detectable=false
