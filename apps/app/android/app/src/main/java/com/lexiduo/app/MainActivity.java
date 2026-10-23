@@ -39,7 +39,6 @@ public class MainActivity extends BridgeActivity {
     public void onPause() {
         if (bridge != null && bridge.getWebView() != null) {
             bridge.getWebView().onPause();
-            bridge.getWebView().pauseTimers();
         }
         super.onPause();
     }

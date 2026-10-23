@@ -1,0 +1,8 @@
+theme: jekyll-theme-primer
+title: Lexiduo
+description: Context-aware, AI-powered dual subtitle translator and language learning ecosystem for Android
+url: "https://mltcsvrai.github.io"
+baseurl: "/lexiduo"
+canonical_url: "https://mltcsvrai.github.io/lexiduo/"
+github:
+  repository_url: "https://github.com/mltcsvrai/lexiduo"

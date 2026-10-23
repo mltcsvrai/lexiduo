@@ -507,13 +507,15 @@ export function App() {
   // Listen for Shared Links & Media Files (Android SendIntent)
   const handleSelectLocalFileRef = useRef(handleSelectLocalFile);
   handleSelectLocalFileRef.current = handleSelectLocalFile;
+  const lastHandledSharedIdRef = useRef<string>('');
 
   useEffect(() => {
     let cleanupFn: (() => void) | null = null;
 
     listenToSharedLinks(async (rawText) => {
       const extracted = extractYouTubeId(rawText);
-      if (extracted && extracted !== useAppStore.getState().videoId) {
+      if (extracted && extracted !== useAppStore.getState().videoId && extracted !== lastHandledSharedIdRef.current) {
+        lastHandledSharedIdRef.current = extracted;
         handleLoadYouTube(rawText);
       } else if (rawText.startsWith('content://') || rawText.startsWith('file://')) {
         const file = await uriToFile(rawText);

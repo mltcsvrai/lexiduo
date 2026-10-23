@@ -228,6 +228,8 @@ public class FloatingSubtitlePlugin extends Plugin {
         if (cuesArray != null && cuesArray.length() > 0) {
             List<SubtitleCue> cues = parseCuesArray(cuesArray);
             FloatingOverlayService.loadCues(cues, true, videoId);
+        } else if (videoId != null && !videoId.trim().isEmpty()) {
+            FloatingOverlayService.setPinnedVideo(videoId.trim());
         }
 
         AutoYouTubeDetector.getInstance().setAutoModeEnabled(true);
@@ -247,19 +249,38 @@ public class FloatingSubtitlePlugin extends Plugin {
     @PluginMethod
     public void openYouTube(PluginCall call) {
         String videoId = call.getString("videoId");
-        if (videoId == null || videoId.trim().isEmpty()) {
-            call.reject("videoId is required");
-            return;
+        if (videoId != null && !videoId.trim().isEmpty()) {
+            String cleanId = videoId.trim();
+            if (!cleanId.matches("^[a-zA-Z0-9_-]{11}$")) {
+                call.reject("Invalid videoId format");
+                return;
+            }
+            openYouTubeVideo(cleanId);
+        } else {
+            openYouTubeApp();
         }
-        String cleanId = videoId.trim();
-        if (!cleanId.matches("^[a-zA-Z0-9_-]{11}$")) {
-            call.reject("Invalid videoId format");
-            return;
-        }
-        openYouTubeVideo(cleanId);
         JSObject ret = new JSObject();
         ret.put("opened", true);
         call.resolve(ret);
+    }
+
+    private void openYouTubeApp() {
+        Context ctx = getContext();
+        try {
+            Intent launchIntent = ctx.getPackageManager().getLaunchIntentForPackage("com.google.android.youtube");
+            if (launchIntent != null) {
+                launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                ctx.startActivity(launchIntent);
+                return;
+            }
+        } catch (Exception ignored) {}
+        try {
+            Intent webIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com"));
+            webIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(webIntent);
+        } catch (Exception ex) {
+            Log.e(TAG, "Failed to launch YouTube app or web", ex);
+        }
     }
 
     private void openYouTubeVideo(String videoId) {

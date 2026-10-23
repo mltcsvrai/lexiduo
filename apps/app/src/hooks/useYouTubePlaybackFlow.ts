@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { 
   extractYouTubeId, 
   fetchYouTubeMetadata, 
@@ -43,6 +43,7 @@ export function useYouTubePlaybackFlow({
   const [pendingVideo, setPendingVideo] = useState<PendingYouTubeVideo | null>(initialPendingVideo);
   const [isChoiceModalOpen, setIsChoiceModalOpen] = useState(Boolean(initialPendingVideo));
   const [isPreparingSubtitles, setIsPreparingSubtitles] = useState(false);
+  const prefetchedCuesRef = useRef<{ videoId: string; cues: SubtitleCue[] } | null>(null);
 
   // Trigger modal when a YouTube video is loaded from any channel
   const initiatePlaybackChoice = useCallback((urlOrId: string) => {
@@ -54,6 +55,24 @@ export function useYouTubePlaybackFlow({
 
     setPendingVideo({ videoId: extracted, rawText: urlOrId });
     setIsChoiceModalOpen(true);
+    prefetchedCuesRef.current = null;
+
+    // Start background prefetch for fast subtitles immediately while user reads modal
+    fetchVideoSubtitles(
+      extracted,
+      sourceLang,
+      targetLang,
+      apiKey,
+      (fastCues) => {
+        if (fastCues && fastCues.length > 0) {
+          prefetchedCuesRef.current = { videoId: extracted, cues: fastCues };
+        }
+      }
+    ).then((res) => {
+      if (res?.cues && res.cues.length > 0) {
+        prefetchedCuesRef.current = { videoId: extracted, cues: res.cues };
+      }
+    }).catch(() => {});
 
     // Fetch title asynchronously in background for modal header
     fetchYouTubeMetadata(extracted).then((meta) => {
@@ -61,16 +80,19 @@ export function useYouTubePlaybackFlow({
         setPendingVideo(prev => prev && prev.videoId === extracted ? { ...prev, title: meta.title } : prev);
       }
     }).catch(() => {});
-  }, [t]);
+  }, [t, sourceLang, targetLang, apiKey]);
 
   // Option 1: Stay in App
   const confirmStayInApp = useCallback(() => {
     if (!pendingVideo) return;
     const { videoId, title } = pendingVideo;
+    if (prefetchedCuesRef.current?.videoId === videoId && prefetchedCuesRef.current.cues.length > 0) {
+      onSubtitlesLoaded?.(prefetchedCuesRef.current.cues);
+    }
     setIsChoiceModalOpen(false);
     setPendingVideo(null);
     onRunInApp(videoId, title);
-  }, [pendingVideo, onRunInApp]);
+  }, [pendingVideo, onRunInApp, onSubtitlesLoaded]);
 
   // Option 2: Continue on YouTube with Floating Subtitles
   const confirmContinueOnYouTube = useCallback(async () => {
@@ -80,6 +102,8 @@ export function useYouTubePlaybackFlow({
     let targetCues: SubtitleCue[] = [];
     if (targetVideoId === currentVideoId && cues.length > 0) {
       targetCues = cues;
+    } else if (prefetchedCuesRef.current?.videoId === targetVideoId && prefetchedCuesRef.current.cues.length > 0) {
+      targetCues = prefetchedCuesRef.current.cues;
     }
 
     let isBgFetching = false;

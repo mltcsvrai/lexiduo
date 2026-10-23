@@ -57,6 +57,7 @@ export interface FloatingSubtitlePlugin {
   getAutoAssistantStatus(): Promise<AutoAssistantStatus>;
   updateAssistantLanguages(options?: { sourceLang?: string; targetLang?: string }): Promise<{ updated?: boolean }>;
   showAiFallback(options?: { show?: boolean }): Promise<{ shown?: boolean }>;
+  openYouTube(options?: { videoId?: string }): Promise<{ opened?: boolean }>;
   updateStyle(options?: { sourceTextColor?: string; targetTextColor?: string; bgColor?: string; bgOpacity?: number; fontSize?: number }): Promise<{ updated?: boolean }>;
   addListener(
     eventName: 'autoAssistantVideoDetected',
@@ -316,5 +317,20 @@ export function addAutoAssistantVideoListener(
   callback: (data: AutoAssistantVideoDetectedData) => void
 ): Promise<{ remove: () => Promise<void> }> {
   return FloatingSubtitle.addListener('autoAssistantVideoDetected', callback);
+}
+
+export async function openYouTubeApp(videoId?: string): Promise<boolean> {
+  if (!Capacitor.isNativePlatform()) {
+    const url = videoId ? `https://www.youtube.com/watch?v=${videoId}` : 'https://www.youtube.com';
+    window.open(url, '_blank');
+    return true;
+  }
+  try {
+    const res = await FloatingSubtitle.openYouTube({ videoId });
+    return Boolean(res?.opened);
+  } catch (err) {
+    console.warn('openYouTubeApp failed on native platform:', err);
+    return false;
+  }
 }
 

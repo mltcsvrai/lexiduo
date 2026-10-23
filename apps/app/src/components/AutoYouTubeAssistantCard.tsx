@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { Sparkles, ExternalLink, Play, Radio, CheckCircle2, ShieldCheck } from 'lucide-react';
-import { useTranslation, useAppStore } from '@lexiduo/core';
+import { useTranslation, useAppStore, openYouTubeApp } from '@lexiduo/core';
 import { useAutoYouTubeAssistant } from '../hooks/useAutoYouTubeAssistant';
 
 export interface AutoYouTubeAssistantCardProps {
@@ -17,19 +17,10 @@ export const AutoYouTubeAssistantCard: React.FC<AutoYouTubeAssistantCardProps> =
   });
 
   const handleOpenYouTube = useCallback(() => {
-    try {
-      const a = document.createElement('a');
-      a.href = 'vnd.youtube://';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => {
-        window.open('https://www.youtube.com', '_system');
-      }, 350);
-    } catch {
+    openYouTubeApp().catch((err) => {
+      console.warn('Failed to open YouTube app:', err);
       window.open('https://www.youtube.com', '_system');
-    }
+    });
   }, []);
 
   return (

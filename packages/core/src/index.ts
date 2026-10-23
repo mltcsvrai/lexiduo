@@ -67,6 +67,7 @@ export {
   stopAutoAssistant,
   getAutoAssistantStatus,
   showFloatingAiFallback,
+  openYouTubeApp,
   addAutoAssistantVideoListener,
   type FloatingPermissionsStatus,
   type FloatingSubtitlePlugin,

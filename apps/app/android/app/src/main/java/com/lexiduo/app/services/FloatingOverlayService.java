@@ -190,6 +190,15 @@ public class FloatingOverlayService extends Service {
         loadCues(cues);
     }
 
+    public static synchronized void setPinnedVideo(String videoId) {
+        if (videoId != null && !videoId.trim().isEmpty()) {
+            sIsPinned = true;
+            sPinnedVideoId = videoId.trim();
+            sPinnedTimestampMs = SystemClock.elapsedRealtime();
+            Log.d(TAG, "Pinned videoId explicitly set before cues: " + sPinnedVideoId);
+        }
+    }
+
     public static void loadCues(List<SubtitleCue> cues) {
         sPendingCues.clear();
         if (cues != null && !cues.isEmpty()) sPendingCues.addAll(cues);
